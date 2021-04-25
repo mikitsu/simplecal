@@ -52,6 +52,8 @@ class Event:
     @property
     def end(self):
         end_ts = self.start.timestamp() + self.duration.total_seconds()
+        # Per the spec, the end is non-inclusive. I want it inclusive.
+        end_ts -= datetime.time.resolution.total_seconds()
         return datetime.datetime.fromtimestamp(end_ts, self._end_tz)
 
     def starting_at(self, new_time):
