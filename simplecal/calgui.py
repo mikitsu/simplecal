@@ -6,36 +6,13 @@ import dataclasses
 import datetime
 import dateutil.tz
 from . import callib
+from . import config
 
-
-# TODO: read these settings form config
-DAYS_OF_WEEK = calendar.day_abbr
-WEEK_STARTS_ON = 0
-TIME_FORMAT = '%H:%M'
-LUM_THRESHOLD = 140
-EVENT_PADDING = 10
-EVENT_FONT = 'opensans 15'
-COLORS = {
-    'MyTag': (255, 255, 0),
-}
-DEFAULT_COLOR = (100, 100, 50)
-ttk.Style().configure(
-    '.',
-    foreground='white',
-    background='#444444',
-)
-ttk.Style().configure(
-    'dayOfWeek.TLabel',
-    font='opensans 30',
-    padding=20,
-)
-ttk.Style().configure(
-    'dateNumber.TLabel',
-    font='opensans 25',
-)
-ttk.Style().configure(
-    'dateCell.TFrame',
-    borderwidth=10,
+STYLE_CLASSES = (
+    ('default', '.'),
+    ('dayOfWeek', 'dayOfWeek.TLabel'),
+    ('dateNumber', 'dateNumber.TLabel'),
+    ('dateCell', 'dateCell.TFrame'),
 )
 
 
@@ -59,8 +36,8 @@ class MonthDisplay:
     def __init__(self, master, dates):
         assert not len(dates) % 7
         self.frame = ttk.Frame(master)
-        
-        for i, day in enumerate(DAYS_OF_WEEK):
+
+        for i, day in enumerate(config.get('days_of_week')):
             ttk.Label(self.frame, text=day, style='dayOfWeek.TLabel'
                       ).grid(row=0, column=i)
             self.frame.grid_columnconfigure(i, weight=1)
@@ -83,26 +60,31 @@ class MonthDisplay:
         for evt in date.events:
             # formula from https://stackoverflow.com/a/3943023
             lum = evt.color[0]*0.299 + evt.color[1]*0.587 + evt.color[2]*0.114
-            if lum > LUM_THRESHOLD:
+            if lum > config.get('lum_threshold'):
                 fg = 'black'
             else:
                 fg = 'white'
             bg = '#' + ''.join(format(v, '0>2x') for v in evt.color)
-            padx = [EVENT_PADDING*(t == date.id) for t in evt.times]
-            opts = {'fg': fg, 'bg': bg, 'font': EVENT_FONT}
+            conf = config.get('styles', 'eventDisplay').copy()
+            conf_padx = conf.pop('padx')
+            if isinstance(conf_padx, int):
+                conf_padx = (conf_padx, conf_padx)
+            padx = [c*(t == date.id) for c, t in zip(conf_padx, evt.times)]
+            pady = conf.pop('pady', None)
+            opts = {'fg': fg, 'bg': bg, **conf}
 
             f = tk.Frame(cell_frame, bg=bg)
             tk.Label(f, text=evt.summary, **opts).pack(side=tk.LEFT)
             tk.Label(f, text=evt.time, **opts).pack(side=tk.RIGHT)
-            f.pack(expand=True, fill=tk.X, padx=padx, pady=(EVENT_PADDING, 0), anchor=tk.N)
+            f.pack(expand=True, fill=tk.X, padx=padx, pady=pady, anchor=tk.N)
 
 
 def generate_dateinfos(year, month, events):
     d1 = datetime.timedelta(days=1)
     first_wd, last_d = calendar.monthrange(year, month)
 
-    extra_before = (first_wd - WEEK_STARTS_ON) % 7
-    extra_after = (6-WEEK_STARTS_ON - calendar.weekday(year, month, last_d)) % 7
+    extra_before = (first_wd - config.get('week_starts_on')) % 7
+    extra_after = (6-config.get('week_starts_on') - calendar.weekday(year, month, last_d)) % 7
     start = datetime.date(year, month, 1) - datetime.timedelta(days=extra_before)
     end = datetime.date(year, month, last_d) + datetime.timedelta(days=extra_after)
 
@@ -117,12 +99,15 @@ def generate_dateinfos(year, month, events):
               .replace(tzinfo=dateutil.tz.UTC)
     q_end = datetime.datetime.combine((end + d1), datetime.time.max)\
             .replace(tzinfo=dateutil.tz.UTC)
+    time_format = config.get('time_format')
+    colors = config.get('tag_colors')
+    default_color = config.get('default_event_color')
     for evt in callib.filter_events(events, q_start, q_end):
         info = EventInfo(
             times=(evt.start.toordinal(), evt.end.toordinal()),
             summary=evt.summary,
-            time='All day' if evt.all_day else evt.start.strftime(TIME_FORMAT),
-            color=next((COLORS[c] for c in evt.categories if c in COLORS), DEFAULT_COLOR),
+            time='All day' if evt.all_day else evt.start.strftime(time_format),
+            color=next((colors[c] for c in evt.categories if c in colors), default_color),
         )
         for date_ord in range(evt.start.toordinal(), evt.end.toordinal()+1):
             try:
@@ -134,3 +119,27 @@ def generate_dateinfos(year, month, events):
         date_info.events.sort(key=lambda e: e.times)
 
     return tuple(dates.values())
+
+
+def run_app():
+    config.load()
+    root = tk.Tk()
+    style = ttk.Style(root)
+    for conf_name, style_name in STYLE_CLASSES:
+        style.configure(style_name, **config.get('styles', conf_name))
+    # TODO: as soon as there are a bit more features,
+    # move the calendar to a separate file
+    events = []
+    for cal in config.get('calendars'):
+        try:
+            with open(cal) as f:
+                data = f.read()
+        except OSError:
+            continue
+        events += callib.get_events(data)
+    # for now, nothing except the current month
+    today = datetime.date.today()
+    dates = generate_dateinfos(today.year, today.month, events)
+    md = MonthDisplay(root, dates)
+    md.frame.pack(expand=True, fill=tk.BOTH)
+    root.mainloop()
