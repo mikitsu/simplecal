@@ -5,17 +5,21 @@ This is a simple iCal-calendar in Python.
 
 Supported:
 
-Not supported:
+- viewing iCal calendars
+- colored categories
+
+Not supported and not planned:
 
 - Free/Busy
 - CalDAV
 - email integration
 
-I'm working on:
+I'm working on/thinking about:
 
-- displaying a calendar
-- allowing edits
-- alarms
+- GUI config editing (for v0.2)
+- allowing edits, i.e. editing and creating new events (for v0.3)
+- alarms (for v1.0)
+- minimal subaspects of CalDAV (for v1.x)
 
 Hopefully works:
 

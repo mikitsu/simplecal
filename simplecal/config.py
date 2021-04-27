@@ -3,6 +3,7 @@ import json
 import calendar
 import os
 import functools
+import logging
 
 __all__ = ['get', 'patch', 'load', 'save']
 
@@ -16,9 +17,9 @@ DEFAULT = {
     'week_starts_on': 0,
     'time_format': '%H:%M',
     'lum_threshold': 140,
-    'default_event_color': (100, 100, 50),
+    'grey_factor': 0.5,
     'tag_colors': {
-        # 'myTagName': (R, G, B),
+        '': '#bbbb88',
     },
     'styles': {
         'default': {},
@@ -67,13 +68,15 @@ def patch(data):
 
 
 def load():
+    logging.info('loading config file %s', config_file)
     get.cache_clear()
     global config
     try:
         with open(config_file) as f:
             data = json.load(f)
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as e:
         data = {}
+        logging.error('error reading config file: %s', e)
     config = merge(DEFAULT, data)
 
 
@@ -81,5 +84,6 @@ def save(data):
     global config
     with open(config_file, 'w') as f:
         json.dump(data)
+    logging.info('wrote configuration to %s', config_file)
     config = data
     get.cache_clear()

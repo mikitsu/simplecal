@@ -8,20 +8,13 @@ import dateutil.tz
 from . import callib
 from . import config
 
-STYLE_CLASSES = (
-    ('default', '.'),
-    ('dayOfWeek', 'dayOfWeek.TLabel'),
-    ('dateNumber', 'dateNumber.TLabel'),
-    ('dateCell', 'dateCell.TFrame'),
-)
-
 
 @dataclasses.dataclass
 class EventInfo:
     times: tuple[int, int]
     summary: str
     time: str
-    color: tuple[int, int, int]
+    color: str  # hex(hash(tag name or ''))
 
 
 @dataclasses.dataclass
@@ -48,35 +41,28 @@ class MonthDisplay:
             self.display_date(date)
 
     def display_date(self, date):
+        def st(name):
+            return ('grey.' if date.grey_out else '') + name
         old_frame, r, c = self.cell_frames[date.id]
-        cell_frame = ttk.Frame(old_frame.master, style='dateCell.TFrame')
+        cell_frame = ttk.Frame(old_frame.master, style=st('dateCell.TFrame'))
         old_frame.destroy()
         self.cell_frames[date.id] = cell_frame
         cell_frame.grid(row=r, column=c, sticky=tk.NSEW)
         del old_frame, c, r
 
-        ttk.Label(cell_frame, text=date.number, style='dateNumber.TLabel'
+        ttk.Label(cell_frame, text=date.number, style=st('dateNumber.TLabel')
                   ).pack(anchor=tk.NW)
         for evt in date.events:
-            # formula from https://stackoverflow.com/a/3943023
-            lum = evt.color[0]*0.299 + evt.color[1]*0.587 + evt.color[2]*0.114
-            if lum > config.get('lum_threshold'):
-                fg = 'black'
-            else:
-                fg = 'white'
-            bg = '#' + ''.join(format(v, '0>2x') for v in evt.color)
-            conf = config.get('styles', 'eventDisplay').copy()
-            conf_padx = conf.pop('padx')
+            conf_padx = config.get('styles', 'eventDisplay', 'padx')
             if isinstance(conf_padx, int):
                 conf_padx = (conf_padx, conf_padx)
             padx = [c*(t == date.id) for c, t in zip(conf_padx, evt.times)]
-            pady = conf.pop('pady', None)
-            opts = {'fg': fg, 'bg': bg, **conf}
 
-            f = tk.Frame(cell_frame, bg=bg)
-            tk.Label(f, text=evt.summary, **opts).pack(side=tk.LEFT)
-            tk.Label(f, text=evt.time, **opts).pack(side=tk.RIGHT)
-            f.pack(expand=True, fill=tk.X, padx=padx, pady=pady, anchor=tk.N)
+            st_pre = st(f'{evt.color}.eventDisplay.')
+            f = ttk.Frame(cell_frame, style=st_pre+'TFrame')
+            ttk.Label(f, text=evt.summary, style=st_pre+'TLabel').pack(side=tk.LEFT)
+            ttk.Label(f, text=evt.time, style=st_pre+'TLabel').pack(side=tk.RIGHT)
+            f.pack(expand=True, fill=tk.X, padx=padx, anchor=tk.N)
 
 
 def generate_dateinfos(year, month, events):
@@ -101,13 +87,12 @@ def generate_dateinfos(year, month, events):
             .replace(tzinfo=dateutil.tz.UTC)
     time_format = config.get('time_format')
     colors = config.get('tag_colors')
-    default_color = config.get('default_event_color')
     for evt in callib.filter_events(events, q_start, q_end):
         info = EventInfo(
             times=(evt.start.toordinal(), evt.end.toordinal()),
             summary=evt.summary,
             time='All day' if evt.all_day else evt.start.strftime(time_format),
-            color=next((colors[c] for c in evt.categories if c in colors), default_color),
+            color=hex(hash(next((c for c in evt.categories if c in colors), ''))),
         )
         for date_ord in range(evt.start.toordinal(), evt.end.toordinal()+1):
             try:
@@ -121,12 +106,42 @@ def generate_dateinfos(year, month, events):
     return tuple(dates.values())
 
 
-def run_app():
-    config.load()
-    root = tk.Tk()
-    style = ttk.Style(root)
+def apply_styles(widget):
+    STYLE_CLASSES = (
+        ('default', '.'),
+        ('dayOfWeek', 'dayOfWeek.TLabel'),
+        ('dateNumber', 'dateNumber.TLabel'),
+        ('dateCell', 'dateCell.TFrame'),
+    )
+    def conf_grey(name):
+        opts = {pre + 'ground': style.lookup(name, pre + 'ground') for pre in ('fore', 'back')}
+        opts = {k: '#' + ''.join(  # hex -> RGB -> *factor -> hex for fore+back
+            format(round(int(v[i:i+2], 16) * config.get('grey_factor')), '0>2x')
+            for i in range(1, 7)) for k, v in opts.items()}
+        style.configure('grey.' + name, **opts)
+
+    style = ttk.Style(widget)
     for conf_name, style_name in STYLE_CLASSES:
         style.configure(style_name, **config.get('styles', conf_name))
+    conf_grey('dateNumber.TLabel')
+    conf_grey('dateCell.TFrame')
+
+    for tag, color in config.get('tag_colors').items():
+        name = hex(hash(tag)) + '.eventDisplay.'
+        assert color.startswith('#') and len(color) == 7
+        for suff in ('TFrame', 'TLabel'):
+            col_rgb = [int(color[i:i+2], 16) for i in range(1, 7)]
+            # formula from https://stackoverflow.com/a/3943023
+            lum = col_rgb[0]*0.299 + col_rgb[1]*0.587 + col_rgb[2]*0.114
+            fg = '#000000' if lum < config.get('lum_threshold') else '#ffffff'
+            opts = {'background': color, 'foreground': fg}
+            style.configure(name + suff, **opts)
+            conf_grey(name + suff)
+
+
+def run_app(year, month):
+    root = tk.Tk()
+    apply_styles(root)
     # TODO: as soon as there are a bit more features,
     # move the calendar to a separate file
     events = []
@@ -137,9 +152,7 @@ def run_app():
         except OSError:
             continue
         events += callib.get_events(data)
-    # for now, nothing except the current month
-    today = datetime.date.today()
-    dates = generate_dateinfos(today.year, today.month, events)
+    dates = generate_dateinfos(year, month, events)
     md = MonthDisplay(root, dates)
     md.frame.pack(expand=True, fill=tk.BOTH)
     root.mainloop()
