@@ -32,15 +32,17 @@ class MonthDisplay:
         assert not len(dates) % 7
         self.frame = ttk.Frame(master)
 
-        for i, day in enumerate(config.get('days_of_week')):
+        for i, day in enumerate(config.get('days_of_week'), -config.get('week_starts_on')):
             ttk.Label(self.frame, text=day, style='dayOfWeek.TLabel'
-                      ).grid(row=0, column=i)
-            self.frame.grid_columnconfigure(i, weight=1)
+                      ).grid(row=0, column=i%7)
+            self.frame.grid_columnconfigure(i%7, weight=1)
 
         self.cell_frames = {}
         for i, date in enumerate(dates, 7):
             self.cell_frames[date.id] = (tk.Frame(self.frame), *divmod(i, 7))
             self.display_date(date)
+            if i % 7 == 0:
+                self.frame.grid_rowconfigure(i//7, weight=1)
 
     def display_date(self, date):
         def st(name):
@@ -48,12 +50,13 @@ class MonthDisplay:
         old_frame, r, c = self.cell_frames[date.id]
         cell_frame = ttk.Frame(old_frame.master, style=st('dateCell.TFrame'))
         old_frame.destroy()
-        self.cell_frames[date.id] = cell_frame
+        self.cell_frames[date.id] = cell_frame, r, c
         cell_frame.grid(row=r, column=c, sticky=tk.NSEW)
         del old_frame, c, r
 
         ttk.Label(cell_frame, text=date.number, style=st('dateNumber.TLabel')
                   ).pack(anchor=tk.NW)
+        event_frame = ttk.Frame(cell_frame, style=st('dateCell.TFrame'))
         for evt in date.events:
             conf_padx = config.get('styles', 'eventDisplay', 'padx')
             if isinstance(conf_padx, int):
@@ -61,10 +64,11 @@ class MonthDisplay:
             padx = [c*(t == date.id) for c, t in zip(conf_padx, evt.times)]
 
             st_pre = st(f'{evt.color}.eventDisplay.')
-            f = ttk.Frame(cell_frame, style=st_pre+'TFrame')
+            f = ttk.Frame(event_frame, style=st_pre+'TFrame')
             ttk.Label(f, text=evt.summary, style=st_pre+'TLabel').pack(side=tk.LEFT)
             ttk.Label(f, text=evt.time, style=st_pre+'TLabel').pack(side=tk.RIGHT)
-            f.pack(expand=True, fill=tk.X, padx=padx, anchor=tk.N)
+            f.pack(expand=True, fill=tk.X, padx=padx)
+        event_frame.pack(expand=True, fill=tk.X, anchor=tk.N)
 
 
 def generate_dateinfos(year, month, events):
@@ -72,7 +76,7 @@ def generate_dateinfos(year, month, events):
     first_wd, last_d = calendar.monthrange(year, month)
 
     extra_before = (first_wd - config.get('week_starts_on')) % 7
-    extra_after = (6-config.get('week_starts_on') - calendar.weekday(year, month, last_d)) % 7
+    extra_after = -(last_d + extra_before) % 7
     start = datetime.date(year, month, 1) - datetime.timedelta(days=extra_before)
     end = datetime.date(year, month, last_d) + datetime.timedelta(days=extra_after)
 
@@ -163,7 +167,8 @@ class SelectionList:
         self.listbox.pack(side=tk.LEFT)
         self.scrollbar.pack(fill=tk.Y, side=tk.RIGHT)
         self.listbox.insert(0, *items)
-        self.listbox.insert(0, 'Add new')
+        if new_cb is not None:
+            self.listbox.insert(0, 'Add new')
         self.listbox.bind('<Double-1>', self.on_select)
         self.listbox.bind('<Delete>', self.on_delete)
         self.new_cb = new_cb
