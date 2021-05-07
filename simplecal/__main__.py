@@ -42,7 +42,7 @@ def main(args):
 
     # import only after logging is set up
     from . import config
-    from . import calgui
+    from . import gui
 
     if args.config_file:
         config.config_file = args.config_file
@@ -50,7 +50,7 @@ def main(args):
     config.patch(args.add_config)
     if args.add_calendar:
         config.patch({'calendars': config.get('calendars') + args.add_calendar})
-    calgui.run_app(*args.month)
+    gui.run_app(*args.month)
 
 
 if __name__ == '__main__':
