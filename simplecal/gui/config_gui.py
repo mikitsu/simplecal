@@ -84,6 +84,61 @@ class SelectionList:
                 self.items_extra.pop(index - (self.new_cb is not None))
 
 
+class KeyValueSelection:
+    def __init__(self, master, name, spec, values):
+        self.frame = ttk.Frame(master)
+        self.name = name
+        self.spec = {k: lambda v: (f(v) if v else f()) for k, f in spec.items()}
+        self._values = {}
+
+        footer_frame = ttk.Frame(self.frame)
+        ttk.Label(footer_frame, text='new entry:').pack(side=tk.LEFT)
+        self.menu = ttk.OptionMenu(
+            footer_frame, tk.Variable(), 'select', command=self.add_pair)
+        self.menu.pack(side=tk.RIGHT)
+        footer_frame.pack(side=tk.BOTOM)
+
+        for k, v in values.items():
+            self.add_pair(k, v)
+
+    def add_pair(self, key, value=None):
+        def validator(new):
+            try:
+                self.spec[key](new)
+            except ValueError:
+                return False
+            else:
+                return True
+
+        if value is None:
+            value = tk_dia.askstring(self.name, key)
+            if value is None:
+                return
+        if not validator(value):
+            return
+
+        self._values[key] = var = tk.StringVar(value=value)
+        frame = ttk.Frame(self.frame)
+        frame.pack(expand=True, fill=tk.X)
+        ttk.Label(frame, text=key).pack(side=tk.LEFT)
+        ttk.Entry(
+            frame, textvariable=var, validate='key',
+            validatecommand=(self.frame.register(validator), '%P'),
+        ).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        ttk.Button(
+            frame, text='X', width=1,
+            command=lambda: (
+                frame.destroy(), self._values.pop(key),
+                self.menu.set_menu('select', *(self.spec.keys() - self._values.keys())),
+            ),
+        ).pack(side=tk.LEFT)
+        self.menu.set_menu('select', *(self.spec.keys() - self._values.keys()))
+
+    @property
+    def values(self):
+        return {k: self.spec[k](v.get()) for k, v in self._values.items()}
+
+
 class BasicConfig:
     def __init__(self, frame, conf):
         self.frame = frame
@@ -182,7 +237,6 @@ class AdvancedConfig:
 
     def update_wso(self, new_text):
         self.wso_index = self.dow.items.index(new_text)
-
 
 
 def display_config_popup(root):
