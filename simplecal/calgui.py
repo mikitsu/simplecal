@@ -241,13 +241,14 @@ def display_config_popup(root):
         deletable=False,
     )
     wso_var = tk.StringVar()
-    wso = ttk.OptionMenu(tab_basic, wso_var, conf['days_of_week'][0], *conf['days_of_week'])
+    _dow_list = conf['days_of_week'][conf['week_starts_on']], *conf['days_of_week']
+    wso = ttk.OptionMenu(tab_basic, wso_var, *_dow_list)
     ttk.Label(tab_basic, text='Week starts on:').pack(side=tk.LEFT)
     wso.pack(side=tk.RIGHT)
     # I hope these are the only ways to select a value.
     for evt in ('<Button>', '<space>'):
         wso.bind(evt, lambda __: wso.set_menu(
-            conf['days_of_week'][0], *conf['days_of_week']))
+            conf['days_of_week'][conf['week_starts_on']], *conf['days_of_week']))
     tabs.add(tab_basic, text='Basic')
     tabs.pack(fill=tk.X)
     ttk.Button(toplevel, text='Save',
