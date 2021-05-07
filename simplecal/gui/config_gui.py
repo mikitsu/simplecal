@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.simpledialog as tk_dia
 import tkinter.filedialog as tk_fdia
+import tkinter.colorchooser as tk_cdia
 from .. import config
 
 
@@ -94,10 +95,32 @@ class BasicConfig:
             unique=True,
             deletable=True,
         )
+        tag_colors = conf['tag_colors'].copy()
+        self.default_tag_color_var = tk.StringVar()
+        self.default_tag_color_btn = tk.Button(
+            frame,
+            text='Default tag color',
+            bg=tag_colors.pop(''),
+            command=self.set_default_tag_color,
+        )
+        self.default_tag_color_btn.pack()
+        self.tags = SelectionList(
+            frame,
+            tag_colors,
+            new_cb=self.new_tag_cb,
+            edit_cb=self.edit_tag_cb,
+            unique=True,
+            deletable=True,
+            items_extra=[{'bg': v} for v in tag_colors.values()],
+        )
 
     def get_config(self):
         return {
             'calendars': self.calendars.items,
+            'tag_colors': {
+                '': self.default_tag_color_btn['bg'],
+                **{k: v['bg'] for k, v in zip(self.tags.items, self.tags.items_extra)}
+            }
         }
 
     def new_calendar_cb(self):
@@ -106,6 +129,25 @@ class BasicConfig:
             filetypes=(('iCalendar', '.ics'), ('All files', '*')),
         )
         return r or None  # empty tuple on cancel, it seems
+
+    def set_default_tag_color(self):
+        new = tk_cdia.askcolor(self.default_tag_color_btn['bg'])[1]
+        if new is not None:
+            self.default_tag_color_btn['bg'] = new
+
+    def new_tag_cb(self):
+        # I'm pretty sure the color chooser can't be combined...
+        name = tk_dia.askstring('New tag', 'Tag name:')
+        if not name:
+            return
+        color = tk_cdia.askcolor()[1]
+        if color is None:
+            return
+        return name, {'bg': color}
+
+    def edit_tag_cb(self, name, cur_opts):
+        color = tk_cdia.askcolor(cur_opts['bg'])[1]
+        return None if color is None else (name, {'bg': color})
 
 
 class AdvancedConfig:
