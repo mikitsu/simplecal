@@ -94,6 +94,23 @@ class BasicConfig:
             unique=True,
             deletable=True,
         )
+
+    def get_config(self):
+        return {
+            'calendars': self.calendars.items,
+        }
+
+    def new_calendar_cb(self):
+        r = tk_fdia.askopenfilename(
+            parent=self.frame.winfo_toplevel(),
+            filetypes=(('iCalendar', '.ics'), ('All files', '*')),
+        )
+        return r or None  # empty tuple on cancel, it seems
+
+
+class AdvancedConfig:
+    def __init__(self, frame, conf):
+        self.frame = frame
         ttk.Label(frame, text='Days of week:').pack()
         self.dow = SelectionList(
             frame,
@@ -113,17 +130,9 @@ class BasicConfig:
 
     def get_config(self):
         return {
-            'calendars': self.calendars.items,
             'days_of_week': self.dow.items,
             'week_starts_on': self.wso_index,
         }
-
-    def new_calendar_cb(self):
-        r = tk_fdia.askopenfilename(
-            parent=self.frame.winfo_toplevel(),
-            filetypes=(('iCalendar', '.ics'), ('All files', '*')),
-        )
-        return r or None  # empty tuple on cancel, it seems
 
     def dow_with_default(self):
         dow = self.get_config()['days_of_week']
@@ -133,17 +142,25 @@ class BasicConfig:
         self.wso_index = self.dow.items.index(new_text)
 
 
+
 def display_config_popup(root):
     def save_config():
-        conf = config.merge(config.config, basic.get_config())
+        # conf = {}
+        conf = config.config.copy()
+        for tab in tabs:
+            conf.update(tab.get_config())
+        assert conf.keys() == config.config.keys()
         config.save(conf)
         toplevel.destroy()
 
     toplevel = tk.Toplevel(root)
     toplevel.transient(root)
-    tabs = ttk.Notebook(toplevel)
-    basic = BasicConfig(ttk.Frame(tabs), config.config)
-    tabs.add(basic.frame, text='Basic')
-    tabs.pack(fill=tk.X)
+    notebook = ttk.Notebook(toplevel)
+    tabs = []
+    for name, cls in (('Basic', BasicConfig), ('Advanced', AdvancedConfig)):
+        tab = cls(ttk.Frame(notebook), config.config)
+        notebook.add(tab.frame, text=name)
+        tabs.append(tab)
+    notebook.pack(fill=tk.X)
     ttk.Button(toplevel, text='Save',  command=save_config).pack(side=tk.LEFT)
     ttk.Button(toplevel, text='Cancel', command=toplevel.destroy).pack(side=tk.RIGHT)
