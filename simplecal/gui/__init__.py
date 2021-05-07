@@ -34,7 +34,7 @@ def apply_styles(widget):
             col_rgb = [int(color[i:i+2], 16) for i in range(1, 7)]
             # formula from https://stackoverflow.com/a/3943023
             lum = col_rgb[0]*0.299 + col_rgb[1]*0.587 + col_rgb[2]*0.114
-            fg = '#000000' if lum < config.get('lum_threshold') else '#ffffff'
+            fg = '#000000' if lum > config.get('lum_threshold') else '#ffffff'
             opts = {'background': color, 'foreground': fg}
             style.configure(name + suff, **opts)
             conf_grey(name + suff)
