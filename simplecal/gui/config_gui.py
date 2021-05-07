@@ -22,11 +22,11 @@ class SelectionList:
                  items_extra=None,
                  ):
         self.frame = ttk.Frame(master)
-        self.frame.pack()
+        self.frame.pack(expand=True, fill=tk.BOTH)
         self.listbox = tk.Listbox(self.frame)
         self.scrollbar = ttk.Scrollbar(self.frame, command=self.listbox.yview)
         self.listbox['yscrollcommand'] = self.scrollbar.set
-        self.listbox.pack(side=tk.LEFT)
+        self.listbox.pack(expand=True, fill=tk.BOTH, side=tk.LEFT)
         self.scrollbar.pack(fill=tk.Y, side=tk.RIGHT)
         self.listbox.insert(0, *items)
         if new_cb is not None:
