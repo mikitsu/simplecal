@@ -4,7 +4,33 @@ from tkinter import ttk
 import tkinter.simpledialog as tk_dia
 import tkinter.filedialog as tk_fdia
 import tkinter.colorchooser as tk_cdia
+import abc
 from .. import config
+
+
+def validated_entry(master, func, fail_on=ValueError, **kwargs):
+    """Add arguments to validate with ``func``
+
+    Default validation arguments are
+    ``validate='key'`` and ``validatecommand=(<func>, '%P')``.
+    The function is automatically registered.
+    To change the ``validatecommand``, pass a tuple without a
+    function as first element; it will be inserted.
+    Raising ``fail_on`` will fail validation without traceback.
+    """
+    def wrapper(*args):
+        try:
+            return func(*args)
+        except fail_on:
+            return False
+
+    reg = master.register(wrapper)
+    if 'validatecommand' in kwargs:
+        kwargs['validatecommand'] = (reg, *kwargs['validatecommand'])
+    else:
+        kwargs['validatecommand'] = (reg, '%P')
+    kwargs.setdefault('validate', 'key')
+    return ttk.Entry(master, **kwargs)
 
 
 class SelectionList:
@@ -139,7 +165,23 @@ class KeyValueSelection:
         return {k: self.spec[k](v.get()) for k, v in self._values.items()}
 
 
-class BasicConfig:
+class ConfigBase:
+    @abc.abstractmethod
+    def __init__(self, frame, conf):
+        pass
+
+    @abc.abstractmethod
+    def get_config(self):
+        pass
+
+    def labeled_side_input(self, label_text, widget, **kwargs):
+        frame = ttk.Frame(self.frame)
+        ttk.Label(frame, text=label_text).pack(side=tk.LEFT)
+        widget(frame, **kwargs).pack(side=tk.RIGHT)
+        return frame
+
+
+class BasicConfig(ConfigBase):
     def __init__(self, frame, conf):
         self.frame = frame
         ttk.Label(frame, text='Calendars:').pack()
@@ -205,9 +247,29 @@ class BasicConfig:
         return None if color is None else (name, {'bg': color})
 
 
-class AdvancedConfig:
+class AdvancedConfig(ConfigBase):
     def __init__(self, frame, conf):
         self.frame = frame
+        self.lum_thres = tk.IntVar(value=conf['lum_threshold'])
+        self.labeled_side_input(
+            'Luminosity threshold:',
+            validated_entry,
+            func=(lambda v:  0 <= int(v) <= 255),
+            textvariable=self.lum_thres,
+        ).pack()
+        self.grey_factor = tk.DoubleVar(value=conf['grey_factor'])
+        self.labeled_side_input(
+            'Grey-out factor:',
+            validated_entry,
+            func=(lambda v: 0 < float(v) <= 1),
+            textvariable=self.grey_factor,
+        ).pack()
+        self.time_format = tk.StringVar(value=conf['time_format'])
+        self.labeled_side_input(
+            'Time format:',
+            ttk.Entry,
+            textvariable=self.time_format,
+        ).pack()
         ttk.Label(frame, text='Days of week:').pack()
         self.dow = SelectionList(
             frame,
@@ -229,6 +291,9 @@ class AdvancedConfig:
         return {
             'days_of_week': self.dow.items,
             'week_starts_on': self.wso_index,
+            'lum_threshold': self.lum_thres.get(),
+            'grey_factor': self.grey_factor.get(),
+            'time_format': self.time_format.get(),
         }
 
     def dow_with_default(self):
@@ -253,9 +318,9 @@ def display_config_popup(root):
     toplevel.transient(root)
     notebook = ttk.Notebook(toplevel)
     tabs = []
-    for name, cls in (('Basic', BasicConfig), ('Advanced', AdvancedConfig)):
+    for cls in ConfigBase.__subclasses__():
         tab = cls(ttk.Frame(notebook), config.config)
-        notebook.add(tab.frame, text=name)
+        notebook.add(tab.frame, text=cls.__name__.replace('Config', ''))
         tabs.append(tab)
     notebook.pack(fill=tk.X)
     ttk.Button(toplevel, text='Save',  command=save_config).pack(side=tk.LEFT)
