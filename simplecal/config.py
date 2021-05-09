@@ -29,7 +29,8 @@ DEFAULT = {
         'eventDisplay': {
             'padx': 10,
         },
-    }
+    },
+    'direct_styles': {},
 }
 config = DEFAULT
 patches = {}

@@ -114,7 +114,7 @@ class KeyValueSelection:
     def __init__(self, master, name, spec, values):
         self.frame = ttk.Frame(master)
         self.name = name
-        self.spec = {k: lambda v: (f(v) if v else f()) for k, f in spec.items()}
+        self.spec = {k: lambda v, f=f: (f(v) if v else f()) for k, f in spec.items()}
         self._values = {}
 
         footer_frame = ttk.Frame(self.frame)
@@ -122,7 +122,7 @@ class KeyValueSelection:
         self.menu = ttk.OptionMenu(
             footer_frame, tk.Variable(), 'select', command=self.add_pair)
         self.menu.pack(side=tk.RIGHT)
-        footer_frame.pack(side=tk.BOTOM)
+        footer_frame.pack(side=tk.BOTTOM)
 
         for k, v in values.items():
             self.add_pair(k, v)
@@ -165,7 +165,7 @@ class KeyValueSelection:
         return {k: self.spec[k](v.get()) for k, v in self._values.items()}
 
 
-class ConfigBase:
+class ConfigBase(abc.ABC):
     @abc.abstractmethod
     def __init__(self, frame, conf):
         pass
@@ -304,9 +304,42 @@ class AdvancedConfig(ConfigBase):
         self.wso_index = self.dow.items.index(new_text)
 
 
+class StyleConfig(ConfigBase):
+    _basic = {
+        'font': str,
+        'foreground': str,
+        'background': str,
+    }
+    SPEC = {
+        'default': _basic,
+        'dayOfWeek': {
+            **_basic,
+            'padding': int,
+        },
+        'dateNumber': _basic,
+        'dateCell': {
+            'background': str,
+        },
+        'eventDisplay': {
+            'font': str,
+            'padx': int,
+        }
+    }
+
+    def __init__(self, frame, conf):
+        self.frame = frame
+        self.kvs = {}
+        for name, spec in self.SPEC.items():
+            self.kvs[name] = KeyValueSelection(frame, name, spec, conf['styles'][name])
+            ttk.Label(frame, text=name).pack()
+            self.kvs[name].frame.pack()
+
+    def get_config(self):
+        return {'styles': {k: v.values for k, v in self.kvs.items()}}
+
+
 def display_config_popup(root):
     def save_config():
-        # conf = {}
         conf = config.config.copy()
         for tab in tabs:
             conf.update(tab.get_config())

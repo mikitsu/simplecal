@@ -13,6 +13,8 @@ def apply_styles(widget):
         ('dayOfWeek', 'dayOfWeek.TLabel'),
         ('dateNumber', 'dateNumber.TLabel'),
         ('dateCell', 'dateCell.TFrame'),
+        ('eventDisplay', 'eventDisplay.TFrame'),
+        ('eventDisplay', 'eventDisplay.TLabel'),
     )
     def conf_grey(name):
         opts = {pre + 'ground': style.lookup(name, pre + 'ground') for pre in ('fore', 'back')}
@@ -38,6 +40,9 @@ def apply_styles(widget):
             opts = {'background': color, 'foreground': fg}
             style.configure(name + suff, **opts)
             conf_grey(name + suff)
+
+    for style_name, options in config.get('direct_styles').items():
+        style.configure(style_name, **options)
 
 
 def run_app(year, month):
