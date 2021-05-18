@@ -12,7 +12,6 @@ def apply_styles(widget):
         ('default', '.'),
         ('dayOfWeek', 'dayOfWeek.TLabel'),
         ('dateNumber', 'dateNumber.TLabel'),
-        ('dateCell', 'dateCell.TFrame'),
         ('eventDisplay', 'eventDisplay.TFrame'),
         ('eventDisplay', 'eventDisplay.TLabel'),
     )

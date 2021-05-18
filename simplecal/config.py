@@ -22,10 +22,11 @@ DEFAULT = {
         '': '#bbbb88',
     },
     'styles': {
-        'default': {},
+        'default': {
+            'font': 'TkTextFont',
+        },
         'dayOfWeek': {},
         'dateNumber': {},
-        'dateCell': {},
         'eventDisplay': {
             'padx': 10,
         },

@@ -110,61 +110,6 @@ class SelectionList:
                 self.items_extra.pop(index - (self.new_cb is not None))
 
 
-class KeyValueSelection:
-    def __init__(self, master, name, spec, values):
-        self.frame = ttk.Frame(master)
-        self.name = name
-        self.spec = {k: lambda v, f=f: (f(v) if v else f()) for k, f in spec.items()}
-        self._values = {}
-
-        footer_frame = ttk.Frame(self.frame)
-        ttk.Label(footer_frame, text='new entry:').pack(side=tk.LEFT)
-        self.menu = ttk.OptionMenu(
-            footer_frame, tk.Variable(), 'select', command=self.add_pair)
-        self.menu.pack(side=tk.RIGHT)
-        footer_frame.pack(side=tk.BOTTOM)
-
-        for k, v in values.items():
-            self.add_pair(k, v)
-
-    def add_pair(self, key, value=None):
-        def validator(new):
-            try:
-                self.spec[key](new)
-            except ValueError:
-                return False
-            else:
-                return True
-
-        if value is None:
-            value = tk_dia.askstring(self.name, key)
-            if value is None:
-                return
-        if not validator(value):
-            return
-
-        self._values[key] = var = tk.StringVar(value=value)
-        frame = ttk.Frame(self.frame)
-        frame.pack(expand=True, fill=tk.X)
-        ttk.Label(frame, text=key).pack(side=tk.LEFT)
-        ttk.Entry(
-            frame, textvariable=var, validate='key',
-            validatecommand=(self.frame.register(validator), '%P'),
-        ).pack(side=tk.LEFT, expand=True, fill=tk.X)
-        ttk.Button(
-            frame, text='X', width=1,
-            command=lambda: (
-                frame.destroy(), self._values.pop(key),
-                self.menu.set_menu('select', *(self.spec.keys() - self._values.keys())),
-            ),
-        ).pack(side=tk.LEFT)
-        self.menu.set_menu('select', *(self.spec.keys() - self._values.keys()))
-
-    @property
-    def values(self):
-        return {k: self.spec[k](v.get()) for k, v in self._values.items()}
-
-
 class ConfigBase(abc.ABC):
     @abc.abstractmethod
     def __init__(self, frame, conf):
@@ -305,37 +250,46 @@ class AdvancedConfig(ConfigBase):
 
 
 class StyleConfig(ConfigBase):
-    _basic = {
-        'font': str,
-        'foreground': str,
-        'background': str,
-    }
-    SPEC = {
-        'default': _basic,
-        'dayOfWeek': {
-            **_basic,
-            'padding': int,
-        },
-        'dateNumber': _basic,
-        'dateCell': {
-            'background': str,
-        },
-        'eventDisplay': {
-            'font': str,
-            'padx': int,
-        }
-    }
+    keys = ('default', 'dayOfWeek', 'dateNumber', 'eventDisplay')
 
     def __init__(self, frame, conf):
+        conf = self.orig_conf = conf['styles']
         self.frame = frame
-        self.kvs = {}
-        for name, spec in self.SPEC.items():
-            self.kvs[name] = KeyValueSelection(frame, name, spec, conf['styles'][name])
-            ttk.Label(frame, text=name).pack()
-            self.kvs[name].frame.pack()
+
+        ttk.Label(self.frame, text='Font').pack()
+        self.font_selects = {}
+        for name in self.keys:
+            f = ttk.Frame(self.frame)
+            ttk.Label(f, text=name).pack(side=tk.LEFT)
+            self.font_selects[name] = e = ttk.Entry(f)
+            e.insert('0', conf[name].get('font', ''))
+            e.pack(side=tk.LEFT)
+            f.pack()
+
+        ttk.Label(self.frame, text='Background color').pack()
+        self.bg_selects = {}
+        for name in self.keys:
+            def switch(name=name):
+                new = tk_cdia.askcolor(self.bg_selects[name]['bg'])[1]
+                if new is not None:
+                    self.bg_selects[name]['bg'] = new
+
+            f = ttk.Frame(self.frame)
+            ttk.Label(f, text=name).pack(side=tk.LEFT)
+            self.bg_selects[name] = b = tk.Button(
+                f, bg=conf[name].get('background'), command=switch,
+            )
+            b.pack(side=tk.LEFT)
+            f.pack()
 
     def get_config(self):
-        return {'styles': {k: v.values for k, v in self.kvs.items()}}
+        return {'styles':
+            {k: {
+                **self.orig_conf[k],
+                'background': self.bg_selects[k]['bg'],
+                'font': self.font_selects[k].get() or None,
+            } for k in self.keys}
+        }
 
 
 def display_config_popup(root):
