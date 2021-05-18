@@ -32,6 +32,7 @@ DEFAULT = {
         },
     },
     'direct_styles': {},
+    'save_pretty': False,
 }
 config = DEFAULT
 patches = {}
@@ -85,7 +86,7 @@ def load():
 def save(data):
     global config
     with open(config_file, 'w') as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=(' '*4 if data['save_pretty'] else None))
     logging.info('wrote configuration to %s', config_file)
     config = data
     get.cache_clear()

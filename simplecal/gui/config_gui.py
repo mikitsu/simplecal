@@ -215,6 +215,11 @@ class AdvancedConfig(ConfigBase):
             ttk.Entry,
             textvariable=self.time_format,
         ).pack()
+        self.pretty_var = tk.BooleanVar(value=conf['save_pretty'])
+        f = ttk.Frame(frame)
+        ttk.Label(f, text='Pretty-save config:').pack(side=tk.LEFT)
+        ttk.Checkbutton(f, variable=self.pretty_var).pack(side=tk.LEFT)
+        f.pack()
         ttk.Label(frame, text='Days of week:').pack()
         self.dow = SelectionList(
             frame,
@@ -239,6 +244,7 @@ class AdvancedConfig(ConfigBase):
             'lum_threshold': self.lum_thres.get(),
             'grey_factor': self.grey_factor.get(),
             'time_format': self.time_format.get(),
+            'save_pretty': self.pretty_var.get(),
         }
 
     def dow_with_default(self):
