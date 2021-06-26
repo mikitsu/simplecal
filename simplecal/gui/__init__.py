@@ -44,9 +44,30 @@ def apply_styles(widget):
         style.configure(style_name, **options)
 
 
+def create_menu(root, md):
+    main_menu = tk.Menu(root, relief='sunken')
+    nav_menu = tk.Menu(main_menu, tearoff=0)
+    nav_menu.add_command(
+        label='Previous month',
+        underline=0,
+        command=lambda: md.move_month(-1),
+    )
+    nav_menu.add_command(
+        label='Next month',
+        underline=0,
+        command=lambda: md.move_month(1),
+    )
+    main_menu.add_cascade(label='Navigation', menu=nav_menu, underline=0)
+    main_menu.add_command(
+        label='Configuration',
+        underline=0,
+        command=lambda: config_gui.display_config_popup(root),
+    )
+    root.config(menu=main_menu)
+
+
 def run_app(year, month):
     root = tk.Tk()
-    root.bind('<c>', lambda e: config_gui.display_config_popup(root))  # TEMP for testing
     apply_styles(root)
     # TODO: as soon as there are a bit more features,
     # move the calendar to a separate file
@@ -61,4 +82,5 @@ def run_app(year, month):
     md = display.MonthDisplay(root, events)
     md.display_month(year, month)
     md.frame.pack(expand=True, fill=tk.BOTH)
+    create_menu(root, md)
     root.mainloop()

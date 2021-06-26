@@ -309,6 +309,7 @@ def display_config_popup(root):
 
     toplevel = tk.Toplevel(root)
     toplevel.transient(root)
+    toplevel.grab_set()
     notebook = ttk.Notebook(toplevel)
     tabs = []
     for cls in ConfigBase.__subclasses__():

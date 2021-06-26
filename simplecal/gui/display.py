@@ -30,13 +30,19 @@ class MonthDisplay:
         self.frame = ttk.Frame(master)
         self.cell_frames = {}
         self.events = list(events)
+        self.current_month_id = None
 
         for i, day in enumerate(config.get('days_of_week'), -config.get('week_starts_on')):
             ttk.Label(self.frame, text=day, style='dayOfWeek.TLabel'
-                      ).grid(row=0, column=i%7)
+                      ).grid(row=1, column=i%7)
             self.frame.grid_columnconfigure(i%7, weight=1)
 
+    def move_month(self, offset):
+        year, nearly_month = divmod(self.current_month_id+offset, 12)
+        self.display_month(year, nearly_month + 1)
+
     def display_month(self, year, month):
+        self.current_month_id = year*12 + month - 1  # put month in 0..11
         for old_frame, __, __ in self.cell_frames.values():
             old_frame.destroy()
         self.cell_frames = {}
