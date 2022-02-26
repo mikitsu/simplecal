@@ -255,47 +255,82 @@ class AdvancedConfig(ConfigBase):
         self.wso_index = self.dow.items.index(new_text)
 
 
+class StyleSelectors(tuple):
+    def init(self, pframe, conf):
+        for sel in self:
+            frame = ttk.Frame(pframe)
+            ttk.Label(frame, text=sel.title).pack(side=tk.LEFT)
+            sel.frame = frame
+            sel.init(conf)
+            frame.pack()
+
+    def get_config(self):
+        return {sel.key: sel.get_conf() for sel in self}
+
+
+class SelectorBase:
+    title_lookup = {}
+
+    def __init__(self, key):
+        self.key = key
+        self.title = self.title_lookup.get(key, key)
+
+
+class TextSelector(SelectorBase):
+    def init(self, conf):
+        self.entry = ttk.Entry(self.frame)
+        self.entry.insert('0', conf.get(self.key, ''))
+        self.entry.pack(side=tk.LEFT)
+
+    def get_conf(self):
+        return self.entry.get() or None
+
+
+class ColorSelector(SelectorBase):
+    title_lookup = {'background': 'background color'}
+
+    def init(self, conf):
+        self.button = tk.Button(
+            self.frame, bg=conf.get(self.key), command=self.chcolor)
+        self.button.pack(side=tk.LEFT)
+
+    def chcolor(self):
+        new = tk_cdia.askcolor(self.button['bg'])[1]
+        if new is not None:
+            self.button['bg'] = new
+
+    def get_conf(self):
+        return self.button['bg']
+
+
+class IntSelector(SelectorBase):
+    def init(self, conf):
+        var = tk.IntVar(self.frame, conf[self.key])
+        validated_entry(self.frame, int, textvariable=var).pack(side=tk.LEFT)
+        self.get_conf = var.get
+
+
 class StyleConfig(ConfigBase):
-    keys = ('default', 'dayOfWeek', 'dateNumber', 'eventDisplay')
+    items_tmpl = tuple({
+        'default': (TextSelector('font'), ColorSelector('background')),
+        'dayOfWeek': (TextSelector('font'), ColorSelector('background')),
+        'dateNumber': (TextSelector('font'), ColorSelector('background')),
+        'eventDisplay': (TextSelector('font'), IntSelector('padx')),
+    }.items())
 
     def __init__(self, frame, conf):
+        self.items = [(k, StyleSelectors(v)) for k, v in self.items_tmpl]
         conf = self.orig_conf = conf['styles']
         self.frame = frame
 
-        ttk.Label(self.frame, text='Font').pack()
-        self.font_selects = {}
-        for name in self.keys:
-            f = ttk.Frame(self.frame)
-            ttk.Label(f, text=name).pack(side=tk.LEFT)
-            self.font_selects[name] = e = ttk.Entry(f)
-            e.insert('0', conf[name].get('font', ''))
-            e.pack(side=tk.LEFT)
-            f.pack()
-
-        ttk.Label(self.frame, text='Background color').pack()
-        self.bg_selects = {}
-        for name in self.keys:
-            def switch(name=name):
-                new = tk_cdia.askcolor(self.bg_selects[name]['bg'])[1]
-                if new is not None:
-                    self.bg_selects[name]['bg'] = new
-
-            f = ttk.Frame(self.frame)
-            ttk.Label(f, text=name).pack(side=tk.LEFT)
-            self.bg_selects[name] = b = tk.Button(
-                f, bg=conf[name].get('background'), command=switch,
-            )
-            b.pack(side=tk.LEFT)
-            f.pack()
+        for name, sels in self.items:
+            ttk.Label(frame, text=name).pack()
+            cframe = ttk.Frame(frame)
+            sels.init(cframe, conf[name])
+            cframe.pack()
 
     def get_config(self):
-        return {'styles':
-            {k: {
-                **self.orig_conf[k],
-                'background': self.bg_selects[k]['bg'],
-                'font': self.font_selects[k].get() or None,
-            } for k in self.keys}
-        }
+        return {'styles': {k: sels.get_config() for k, sels in self.items}}
 
 
 def display_config_popup(root):
