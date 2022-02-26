@@ -34,7 +34,7 @@ class MonthDisplay:
 
         for i, day in enumerate(config.get('days_of_week'), -config.get('week_starts_on')):
             ttk.Label(self.frame, text=day, style='dayOfWeek.TLabel'
-                      ).grid(row=1, column=i%7)
+                      ).grid(row=0, column=i%7)
             self.frame.grid_columnconfigure(i%7, weight=1)
 
     def move_month(self, offset):
