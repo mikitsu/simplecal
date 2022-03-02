@@ -16,7 +16,6 @@ Not supported and not planned:
 
 I'm working on/thinking about:
 
-- GUI config editing (for v0.2)
 - allowing edits, i.e. editing and creating new events (for v0.3)
 - alarms (for v1.0)
 - minimal subaspects of CalDAV (for v1.x)
