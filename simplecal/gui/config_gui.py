@@ -137,6 +137,14 @@ class BasicConfig(ConfigBase):
             unique=True,
             deletable=True,
         )
+        dframe = ttk.Frame(frame)
+        self.dis_var = tk.StringVar()
+        ttk.Label(dframe, text='Display: ').pack(side=tk.LEFT)
+        ttk.OptionMenu(
+            dframe, self.dis_var, config.get('display'),
+            'month', 'vtimeline', 'htimeline', 'vweek', 'hweek',
+        ).pack(side=tk.LEFT)
+        dframe.pack()
         tag_colors = conf['tag_colors'].copy()
         self.default_tag_color_var = tk.StringVar()
         self.default_tag_color_btn = tk.Button(
@@ -159,6 +167,7 @@ class BasicConfig(ConfigBase):
     def get_config(self):
         return {
             'calendars': self.calendars.items,
+            'display': self.dis_var.get(),
             'tag_colors': {
                 '': self.default_tag_color_btn['bg'],
                 **{k: v['bg'] for k, v in zip(self.tags.items, self.tags.items_extra)}
@@ -229,13 +238,24 @@ class AdvancedConfig(ConfigBase):
             deletable=False,
         )
         self.wso_index = conf['week_starts_on']
+        wframe = ttk.Frame(frame)
         wso = ttk.OptionMenu(
-            frame, tk.StringVar(), *self.dow_with_default(), command=self.update_wso)
-        ttk.Label(frame, text='Week starts on:').pack(side=tk.LEFT)
+            wframe, tk.StringVar(), *self.dow_with_default(), command=self.update_wso)
+        ttk.Label(wframe, text='Week starts on:').pack(side=tk.LEFT)
         wso.pack(side=tk.RIGHT)
+        wframe.pack()
         # I hope these are the only ways to select a value.
         for evt in ('<Button>', '<space>'):
             wso.bind(evt, lambda __: wso.set_menu(*self.dow_with_default()))
+        ttk.Label(frame, text='Timeline display').pack()
+        self.timeline_sels = Selectors((
+            IntSelector('past'),
+            IntSelector('future'),
+            IntSelector('jump'),
+        ))
+        tframe = ttk.Frame(frame)
+        self.timeline_sels.init(tframe, conf['timeline'])
+        tframe.pack()
 
     def get_config(self):
         return {
@@ -245,17 +265,18 @@ class AdvancedConfig(ConfigBase):
             'grey_factor': self.grey_factor.get(),
             'time_format': self.time_format.get(),
             'save_pretty': self.pretty_var.get(),
+            'timeline': self.timeline_sels.get_conf(),
         }
 
     def dow_with_default(self):
-        dow = self.get_config()['days_of_week']
+        dow = self.dow.items
         return dow[self.wso_index], *dow
 
     def update_wso(self, new_text):
         self.wso_index = self.dow.items.index(new_text)
 
 
-class StyleSelectors(tuple):
+class Selectors(tuple):
     def init(self, pframe, conf):
         for sel in self:
             frame = ttk.Frame(pframe)
@@ -264,7 +285,7 @@ class StyleSelectors(tuple):
             sel.init(conf)
             frame.pack()
 
-    def get_config(self):
+    def get_conf(self):
         return {sel.key: sel.get_conf() for sel in self}
 
 
@@ -319,7 +340,7 @@ class StyleConfig(ConfigBase):
     }.items())
 
     def __init__(self, frame, conf):
-        self.items = [(k, StyleSelectors(v)) for k, v in self.items_tmpl]
+        self.items = [(k, Selectors(v)) for k, v in self.items_tmpl]
         conf = self.orig_conf = conf['styles']
         self.frame = frame
 
@@ -330,7 +351,7 @@ class StyleConfig(ConfigBase):
             cframe.pack()
 
     def get_config(self):
-        return {'styles': {k: sels.get_config() for k, sels in self.items}}
+        return {'styles': {k: sels.get_conf() for k, sels in self.items}}
 
 
 def display_config_popup(root):

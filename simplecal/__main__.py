@@ -5,6 +5,9 @@ import sys
 import os
 import logging
 import datetime
+import functools
+
+import dateutil.parser
 
 __version__ = 'dev'
 
@@ -16,10 +19,10 @@ def get_args():
     help='Add the given JSON to the configuration for this run only.')
     parser.add_argument('-c', '--add-calendar', action='append',
     help='Add the given calendar without removing already configured ones.')
-    parser.add_argument('-m', '--month', type=lambda s: (int(s[:4]), int(s[5:])),
-    # if you run this on Dec 31. at 23:59:59.999, problems are your own fault
-    default=(datetime.date.today().year, datetime.date.today().month),
-    help='Show the given month (YYYY-MM) instead of the current one.')
+    parser.add_argument('-d', '--display',
+    type=functools.partial(dateutil.parser.parse, dayfirst=True),
+    default=datetime.date.today(),
+    help='Show the given date instead of the current one.')
     parser.add_argument('-V', '--version', action='store_true',
     help='Show version and exit.')
     parser.add_argument('-v', '--verbose', action='count', default=0,
@@ -50,7 +53,7 @@ def main(args):
     config.patch(args.add_config)
     if args.add_calendar:
         config.patch({'calendars': config.get('calendars') + args.add_calendar})
-    gui.run_app(*args.month)
+    gui.run_app(args.display)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,8 @@
 """GUI"""
 import tkinter as tk
 from tkinter import ttk
+import tkinter.simpledialog as tk_dia
+import dateutil.parser
 from .. import config
 from .. import callib
 from . import config_gui
@@ -26,6 +28,7 @@ def apply_styles(widget):
     for conf_name, style_name in STYLE_CLASSES:
         style.configure(style_name, **config.get('styles', conf_name))
     conf_grey('dateNumber.TLabel')
+    conf_grey('dayOfWeek.TLabel')
     conf_grey('dateCell.TFrame')
 
     for tag, color in config.get('tag_colors').items():
@@ -44,18 +47,28 @@ def apply_styles(widget):
         style.configure(style_name, **options)
 
 
-def create_menu(root, md):
+def create_menu(root, dis):
     main_menu = tk.Menu(root, relief='sunken')
     nav_menu = tk.Menu(main_menu, tearoff=0)
+
+    def jump_handler():
+        target = tk_dia.askstring('Jump to date', 'Date to jump to')
+        try:
+            day = dateutil.parser.parse(target, dayfirst=True)
+        except (TypeError, dateutil.parser.ParserError):
+            return
+        dis.display(day.date())
+
+    nav_menu.add_command(label='Jump to', underline=0, command=jump_handler)
     nav_menu.add_command(
-        label='Previous month',
+        label='Previous',
         underline=0,
-        command=lambda: md.move_month(-1),
+        command=lambda: dis.move(-1),
     )
     nav_menu.add_command(
-        label='Next month',
+        label='Next',
         underline=0,
-        command=lambda: md.move_month(1),
+        command=lambda: dis.move(1),
     )
     main_menu.add_cascade(label='Navigation', menu=nav_menu, underline=0)
     main_menu.add_command(
@@ -66,7 +79,7 @@ def create_menu(root, md):
     root.config(menu=main_menu)
 
 
-def run_app(year, month):
+def run_app(date):
     root = tk.Tk()
     apply_styles(root)
     # TODO: as soon as there are a bit more features,
@@ -79,8 +92,21 @@ def run_app(year, month):
         except OSError:
             continue
         events += callib.get_events(data)
-    md = display.MonthDisplay(root, events)
-    md.display_month(year, month)
-    md.frame.pack(expand=True, fill=tk.BOTH)
-    create_menu(root, md)
+    display_name = config.get('display')
+    if display_name.startswith(('v', 'h')):
+        vertical = display_name.startswith('v')
+        display_name = display_name[1:]
+    dis_cls = {
+        'month': display.MonthDisplay,
+        'timeline': display.TimelineDisplay,
+        'week': display.WeekDisplay,
+    }[display_name]
+    dis = dis_cls(root, events)
+    try:
+        dis.vertical = vertical
+    except NameError:
+        pass
+    dis.display(date)
+    dis.frame.pack(expand=True, fill=tk.BOTH)
+    create_menu(root, dis)
     root.mainloop()

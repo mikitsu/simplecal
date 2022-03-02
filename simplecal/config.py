@@ -13,6 +13,7 @@ config_file = os.path.join(
 )
 DEFAULT = {
     'calendars': [],
+    'display': 'month',
     'days_of_week': list(calendar.day_abbr),
     'week_starts_on': 0,
     'time_format': '%H:%M',
@@ -30,6 +31,11 @@ DEFAULT = {
         'eventDisplay': {
             'padx': 10,
         },
+    },
+    'timeline': {
+        'past': 1,
+        'future': 5,
+        'jump': 3,
     },
     'direct_styles': {},
     'save_pretty': False,

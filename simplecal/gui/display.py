@@ -21,83 +21,162 @@ class EventInfo:
 class DateInfo:
     id: int
     number: str
+    weekday: str
     grey_out: bool
     events: list[EventInfo] = dataclasses.field(default_factory=list)
 
 
-class MonthDisplay:
-    def __init__(self, master, events):
-        self.frame = ttk.Frame(master)
-        self.cell_frames = {}
-        self.events = list(events)
-        self.current_month_id = None
+class DisplayBase:
+    def __init__(self, parent, events):
+        self.frame = ttk.Frame(parent)
+        self.events = events
+        self.cur_day = None
 
+    def move(self, offset):
+        self.display(self._move(offset))
+
+    def display(self, day):
+        self.cur_day = day
+        kill_all_children(self.frame)
+        self._display()
+
+
+class MonthDisplay(DisplayBase):
+    def _move(self, offset):
+        dyear, tmonth = divmod(self.cur_day.month + offset, 12)
+        return self.cur_day.replace(
+            year=self.cur_day.year + dyear,
+            month=tmonth,
+        )
+
+    def get_dateinfos(self):
+        year, month = self.cur_day.year, self.cur_day.month
+        first_wd, last_d = calendar.monthrange(year, month)
+        extra_before = (first_wd - config.get('week_starts_on')) % 7
+        return generate_dateinfos(
+            self.events,
+            datetime.date(year, month, 1),
+            datetime.date(year, month, last_d),
+            extra_before,
+            -(last_d + extra_before) % 7,
+        )
+
+    def _display(self):
         for i, day in enumerate(config.get('days_of_week'), -config.get('week_starts_on')):
             ttk.Label(self.frame, text=day, style='dayOfWeek.TLabel'
                       ).grid(row=0, column=i%7)
             self.frame.grid_columnconfigure(i%7, weight=1)
-
-    def move_month(self, offset):
-        year, nearly_month = divmod(self.current_month_id+offset, 12)
-        self.display_month(year, nearly_month + 1)
-
-    def display_month(self, year, month):
-        self.current_month_id = year*12 + month - 1  # put month in 0..11
-        for old_frame, __, __ in self.cell_frames.values():
-            old_frame.destroy()
-        self.cell_frames = {}
-        for i, date in enumerate(generate_dateinfos(year, month, self.events), 7):
-            self.cell_frames[date.id] = (tk.Frame(self.frame), *divmod(i, 7))
-            self.display_date(date)
+    
+        for i, date in enumerate(self.get_dateinfos(), 7):
+            self.display_date(date, *divmod(i, 7))
             if i % 7 == 0:
                 self.frame.grid_rowconfigure(i//7, weight=1)
 
-    def display_date(self, date):
-        def st(name):
-            return ('grey.' if date.grey_out else '') + name
-        old_frame, r, c = self.cell_frames[date.id]
-        cell_frame = ttk.Frame(old_frame.master, style=st('dateCell.TFrame'))
-        old_frame.destroy()
-        self.cell_frames[date.id] = cell_frame, r, c
-        cell_frame.grid(row=r, column=c, sticky=tk.NSEW)
-        del old_frame, c, r
-
+    def display_date(self, date, row, col):
+        st = get_style_helper(date)
+        cell_frame = ttk.Frame(self.frame, style=st('dateCell.TFrame'))
+        cell_frame.grid(row=row, column=col, sticky=tk.NSEW)
         ttk.Label(cell_frame, text=date.number, style=st('dateNumber.TLabel')
                   ).pack(anchor=tk.NW)
-        event_frame = ttk.Frame(cell_frame, style=st('dateCell.TFrame'))
-        for evt in date.events:
-            conf_padx = config.get('styles', 'eventDisplay', 'padx')
-            if isinstance(conf_padx, int):
-                conf_padx = (conf_padx, conf_padx)
-            padx = [c*(t == date.id) for c, t in zip(conf_padx, evt.times)]
-
-            st_pre = st(f'{evt.color}.eventDisplay.')
-            f = ttk.Frame(event_frame, style=st_pre+'TFrame')
-            ttk.Label(f, text=evt.summary, style=st_pre+'TLabel').pack(side=tk.LEFT)
-            ttk.Label(f, text=evt.time, style=st_pre+'TLabel').pack(side=tk.RIGHT)
-            f.pack(expand=True, fill=tk.X, padx=padx)
-        event_frame.pack(expand=True, fill=tk.X, anchor=tk.N)
+        make_event_frame(cell_frame, date)
 
 
-def generate_dateinfos(year, month, events):
-    d1 = datetime.timedelta(days=1)
-    first_wd, last_d = calendar.monthrange(year, month)
+class TimelineDisplay(DisplayBase):
+    move_unit = config.get('timeline', 'jump')
+    vertical: bool
 
-    extra_before = (first_wd - config.get('week_starts_on')) % 7
-    extra_after = -(last_d + extra_before) % 7
-    start = datetime.date(year, month, 1) - datetime.timedelta(days=extra_before)
-    end = datetime.date(year, month, last_d) + datetime.timedelta(days=extra_after)
+    def _move(self, offset):
+        return self.cur_day + deltadays(offset*self.move_unit)
 
-    dates = {}
-    cur = start
-    while cur <= end:
-        dates[cur] = DateInfo(cur.toordinal(), str(cur.day), cur.month != month)
-        cur += d1
+    def get_dateinfos(self):
+        return generate_dateinfos(
+            self.events,
+            self.cur_day,
+            self.cur_day + deltadays(config.get('timeline', 'future')),
+            config.get('timeline', 'past'),
+        )
+
+    def _display(self):
+        for date in self.get_dateinfos():
+            st = get_style_helper(date)
+            frame = self.add_frame(st('dateCell.TFrame'))
+            hframe = ttk.Frame(frame, style=st('dateCell.TFrame'))
+            ttk.Label(
+                hframe, text=date.number, style=st('dateNumber.TLabel')
+            ).pack(side=tk.LEFT)
+            ttk.Label(
+                hframe, text=date.weekday, style=st('dayOfWeek.TLabel')
+            ).pack(side=tk.RIGHT)
+            hframe.pack(fill=tk.X, expand=True)
+            make_event_frame(frame, date)
+
+    def add_frame(self, style):
+        frame = ttk.Frame(self.frame, style=style)
+        side = tk.TOP if self.vertical else tk.LEFT
+        frame.pack(side=side, expand=True, fill=tk.X)
+        return frame
+
+
+class WeekDisplay(TimelineDisplay):
+    move_unit = 7
+
+    def get_dateinfos(self):
+        start = self.cur_day - deltadays(
+            (self.cur_day.weekday()-config.get('week_starts_on')) % 7)
+        return generate_dateinfos(self.events, start, start + deltadays(6))
+
+
+def make_event_frame(parent, date):
+    st = get_style_helper(date)
+    event_frame = ttk.Frame(parent, style=st('dateCell.TFrame'))
+    for evt in date.events:
+        conf_padx = config.get('styles', 'eventDisplay', 'padx')
+        if isinstance(conf_padx, int):
+            conf_padx = (conf_padx, conf_padx)
+        padx = [c*(t == date.id) for c, t in zip(conf_padx, evt.times)]
+
+        st_pre = st(f'{evt.color}.eventDisplay.')
+        f = ttk.Frame(event_frame, style=st_pre+'TFrame')
+        ttk.Label(f, text=evt.summary, style=st_pre+'TLabel').pack(side=tk.LEFT)
+        ttk.Label(f, text=evt.time, style=st_pre+'TLabel').pack(side=tk.RIGHT)
+        f.pack(expand=True, fill=tk.X, padx=padx)
+    event_frame.pack(expand=True, fill=tk.X, anchor=tk.N)
+
+
+def get_style_helper(date):
+    return lambda name: ('grey.' if date.grey_out else '') + name
+
+
+def kill_all_children(widget):
+    for child in tuple(widget.children.values()):
+        child.destroy()
+
+
+def deltadays(days):
+    return datetime.timedelta(days=days)
+
+
+def date_range(start, end):
+    return map(datetime.date.fromordinal, range(start.toordinal(), 1+end.toordinal()))
+
+
+def generate_dateinfos(events, start, end, extra_before=0, extra_after=0):
+    d1 = deltadays(1)
+    start_ = start - deltadays(extra_before)
+    end_  = end + deltadays(extra_after)
+    dates = {
+        d: DateInfo(
+            d.toordinal(),
+            str(d.day),
+            config.get('days_of_week')[d.weekday()],
+            not (start <= d <= end),
+        ) for d in date_range(start_, end_)
+    }
 
     # one day safety for timezones quirks (which probably won't actually happen)
-    q_start = datetime.datetime.combine((start - d1), datetime.time.min)\
+    q_start = datetime.datetime.combine((start_ - d1), datetime.time.min)\
               .replace(tzinfo=dateutil.tz.UTC)
-    q_end = datetime.datetime.combine((end + d1), datetime.time.max)\
+    q_end = datetime.datetime.combine((end_ + d1), datetime.time.max)\
             .replace(tzinfo=dateutil.tz.UTC)
     time_format = config.get('time_format')
     colors = config.get('tag_colors')
@@ -108,9 +187,9 @@ def generate_dateinfos(year, month, events):
             time='All day' if evt.all_day else evt.start.strftime(time_format),
             color=hex(hash(next((c for c in evt.categories if c in colors), ''))),
         )
-        for date_ord in range(evt.start.toordinal(), evt.end.toordinal()+1):
+        for d in date_range(evt.start, evt.end):
             try:
-                dates[datetime.date.fromordinal(date_ord)].events.append(info)
+                dates[d].events.append(info)
             except KeyError:
                 pass
 
