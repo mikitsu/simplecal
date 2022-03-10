@@ -12,13 +12,13 @@ config_file = os.path.join(
     'simplecal', 'config.json',
 )
 DEFAULT = {
-    'calendars': [],
     'display': 'month',
     'days_of_week': list(calendar.day_abbr),
     'week_starts_on': 0,
     'time_format': '%H:%M',
     'lum_threshold': 140,
     'grey_factor': 0.5,
+    'autosave': True,
     'tag_colors': {
         '': '#bbbb88',
     },

@@ -1,12 +1,25 @@
 """GUI"""
 import tkinter as tk
 from tkinter import ttk
+import tkinter.messagebox as tk_msg
 import tkinter.simpledialog as tk_dia
+import collections
+import logging
 import dateutil.parser
 from .. import config
-from .. import callib
 from . import config_gui
 from . import display
+from . import editing
+
+
+class MessageboxHandler(logging.Handler):
+    def emit(self, record):
+        func = tk_msg.showinfo
+        if record.levelno >= logging.WARNING:
+            func = tk_msg.showwarning
+        if record.levelno >= logging.ERROR:
+            func = tk_dia.showerror
+        func(record.levelname, record.message)
 
 
 def apply_styles(widget):
@@ -47,7 +60,7 @@ def apply_styles(widget):
         style.configure(style_name, **options)
 
 
-def create_menu(root, dis):
+def create_menu(root, dis, save_cb):
     main_menu = tk.Menu(root, relief='sunken')
     nav_menu = tk.Menu(main_menu, tearoff=0)
 
@@ -70,6 +83,8 @@ def create_menu(root, dis):
         underline=0,
         command=lambda: dis.move(1),
     )
+    if save_cb is not None:
+        main_menu.add_command(label='Save', underline=0, command=save_cb)
     main_menu.add_cascade(label='Navigation', menu=nav_menu, underline=0)
     main_menu.add_command(
         label='Configuration',
@@ -79,19 +94,11 @@ def create_menu(root, dis):
     root.config(menu=main_menu)
 
 
-def run_app(date):
+def run_app(date, calendars, allow_write):
+    logging.root.addHandler(MessageboxHandler(logging.WARNING))
     root = tk.Tk()
     apply_styles(root)
-    # TODO: as soon as there are a bit more features,
-    # move the calendar to a separate file
-    events = []
-    for cal in config.get('calendars'):
-        try:
-            with open(cal) as f:
-                data = f.read()
-        except OSError:
-            continue
-        events += callib.get_events(data)
+    events = collections.ChainMap(*(c.events for c in calendars))
     display_name = config.get('display')
     if display_name.startswith(('v', 'h')):
         vertical = display_name.startswith('v')
@@ -101,12 +108,41 @@ def run_app(date):
         'timeline': display.TimelineDisplay,
         'week': display.WeekDisplay,
     }[display_name]
-    dis = dis_cls(root, events)
+
+    if allow_write:
+        def save_cb():
+            try:
+                calendars[0].write()
+            except OSError as e:
+                logging.error(str(e))
+
+        def edit_cb(evt):
+            events[evt.uid] = evt
+            if config.get('autosave'):
+                save_cb()
+            dis.display()
+
+        def delete_cb(evt):
+            try:
+                del events[evt.uid]
+            except KeyError:
+                logging.error(f'Event {evt} not in writable calendar')
+            else:
+                if evt.uid in events:
+                    logging.warning(f'Event {evt} still in non-writable calendar')
+                if config.get('autosave'):
+                    save_cb()
+                dis.display()
+    else:
+        edit_cb = delete_cb = save_cb = None
+
+    add_event, edit_event = editing.get_handlers(root, edit_cb, delete_cb)
+    dis = dis_cls(root, date, events.values(), add_event, edit_event)
     try:
         dis.vertical = vertical
     except NameError:
         pass
-    dis.display(date)
+    dis.display()
     dis.frame.pack(expand=True, fill=tk.BOTH)
-    create_menu(root, dis)
+    create_menu(root, dis, save_cb)
     root.mainloop()

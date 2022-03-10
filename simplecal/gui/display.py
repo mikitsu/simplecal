@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import dataclasses
 import calendar
+import functools
 import datetime
 import dateutil.tz
 from .. import callib
@@ -15,6 +16,7 @@ class EventInfo:
     summary: str
     time: str
     color: str  # hex(hash(tag name or ''))
+    event: callib.Event
 
 
 @dataclasses.dataclass
@@ -23,22 +25,46 @@ class DateInfo:
     number: str
     weekday: str
     grey_out: bool
+    date: datetime.date
     events: list[EventInfo] = dataclasses.field(default_factory=list)
 
 
 class DisplayBase:
-    def __init__(self, parent, events):
+    def __init__(self, parent, cur_day, events, add_event, edit_event):
         self.frame = ttk.Frame(parent)
         self.events = events
-        self.cur_day = None
+        self.add_event_cb = add_event
+        self.edit_event_cb = edit_event
+        self.cur_day = cur_day
 
     def move(self, offset):
         self.display(self._move(offset))
 
-    def display(self, day):
-        self.cur_day = day
+    def display(self, day=None):
+        if day is not None:
+            self.cur_day = day
         kill_all_children(self.frame)
         self._display()
+
+    def make_event_frame(self, parent, date):
+        st = get_style_helper(date)
+        container = ttk.Frame(parent, style=st('dateCell.TFrame'))
+        for evt in date.events:
+            conf_padx = config.get('styles', 'eventDisplay', 'padx')
+            if isinstance(conf_padx, int):
+                conf_padx = (conf_padx, conf_padx)
+            padx = [c*(t == date.id) for c, t in zip(conf_padx, evt.times)]
+
+            st_pre = st(f'{evt.color}.eventDisplay.')
+            frame = ttk.Frame(container, style=st_pre+'TFrame')
+            labelL = ttk.Label(frame, text=evt.summary, style=st_pre+'TLabel')
+            labelL.pack(side=tk.LEFT)
+            labelR = ttk.Label(frame, text=evt.time, style=st_pre+'TLabel')
+            labelR.pack(side=tk.RIGHT)
+            frame.pack(expand=True, fill=tk.X, padx=padx)
+            for w in (frame, labelL, labelR):
+                w.bind('<1>', functools.partial(self.edit_event_cb, evt.event))
+        container.pack(expand=True, fill=tk.X, anchor=tk.N)
 
 
 class MonthDisplay(DisplayBase):
@@ -68,7 +94,7 @@ class MonthDisplay(DisplayBase):
             ttk.Label(self.frame, text=day, style='dayOfWeek.TLabel'
                       ).grid(row=0, column=i%7)
             self.frame.grid_columnconfigure(i%7, weight=1)
-    
+
         for i, date in enumerate(self.get_dateinfos(), 7):
             self.display_date(date, *divmod(i, 7))
             if i % 7 == 0:
@@ -80,7 +106,8 @@ class MonthDisplay(DisplayBase):
         cell_frame.grid(row=row, column=col, sticky=tk.NSEW)
         ttk.Label(cell_frame, text=date.number, style=st('dateNumber.TLabel')
                   ).pack(anchor=tk.NW)
-        make_event_frame(cell_frame, date)
+        self.make_event_frame(cell_frame, date)
+        cell_frame.bind('<1>', lambda _: self.add_event_cb(date.date))
 
 
 class TimelineDisplay(DisplayBase):
@@ -110,7 +137,8 @@ class TimelineDisplay(DisplayBase):
                 hframe, text=date.weekday, style=st('dayOfWeek.TLabel')
             ).pack(side=tk.RIGHT)
             hframe.pack(fill=tk.X, expand=True)
-            make_event_frame(frame, date)
+            self.make_event_frame(frame, date)
+            hframe.bind('<1>', lambda _, d=date.date: self.add_event_cb(d))
 
     def add_frame(self, style):
         frame = ttk.Frame(self.frame, style=style)
@@ -126,23 +154,6 @@ class WeekDisplay(TimelineDisplay):
         start = self.cur_day - deltadays(
             (self.cur_day.weekday()-config.get('week_starts_on')) % 7)
         return generate_dateinfos(self.events, start, start + deltadays(6))
-
-
-def make_event_frame(parent, date):
-    st = get_style_helper(date)
-    event_frame = ttk.Frame(parent, style=st('dateCell.TFrame'))
-    for evt in date.events:
-        conf_padx = config.get('styles', 'eventDisplay', 'padx')
-        if isinstance(conf_padx, int):
-            conf_padx = (conf_padx, conf_padx)
-        padx = [c*(t == date.id) for c, t in zip(conf_padx, evt.times)]
-
-        st_pre = st(f'{evt.color}.eventDisplay.')
-        f = ttk.Frame(event_frame, style=st_pre+'TFrame')
-        ttk.Label(f, text=evt.summary, style=st_pre+'TLabel').pack(side=tk.LEFT)
-        ttk.Label(f, text=evt.time, style=st_pre+'TLabel').pack(side=tk.RIGHT)
-        f.pack(expand=True, fill=tk.X, padx=padx)
-    event_frame.pack(expand=True, fill=tk.X, anchor=tk.N)
 
 
 def get_style_helper(date):
@@ -165,31 +176,33 @@ def date_range(start, end):
 def generate_dateinfos(events, start, end, extra_before=0, extra_after=0):
     d1 = deltadays(1)
     start_ = start - deltadays(extra_before)
-    end_  = end + deltadays(extra_after)
+    end_ = end + deltadays(extra_after)
     dates = {
         d: DateInfo(
             d.toordinal(),
             str(d.day),
             config.get('days_of_week')[d.weekday()],
             not (start <= d <= end),
+            d,
         ) for d in date_range(start_, end_)
     }
 
-    # one day safety for timezones quirks (which probably won't actually happen)
-    q_start = datetime.datetime.combine((start_ - d1), datetime.time.min)\
+    # one day safety for timezone quirks (which probably won't actually happen)
+    q_start = datetime.datetime.combine((start_ - d1), datetime.time.min) \
               .replace(tzinfo=dateutil.tz.UTC)
-    q_end = datetime.datetime.combine((end_ + d1), datetime.time.max)\
+    q_end = datetime.datetime.combine((end_ + d1), datetime.time.max) \
             .replace(tzinfo=dateutil.tz.UTC)
     time_format = config.get('time_format')
     colors = config.get('tag_colors')
     for evt in callib.filter_events(events, q_start, q_end):
         info = EventInfo(
-            times=(evt.start.toordinal(), evt.end.toordinal()),
+            times=(evt.start, -evt.end.timestamp()),
             summary=evt.summary,
             time='All day' if evt.all_day else evt.start.strftime(time_format),
             color=hex(hash(next((c for c in evt.categories if c in colors), ''))),
+            event=evt,
         )
-        for d in date_range(evt.start, evt.end):
+        for d in date_range(evt.start, evt.end - datetime.timedelta.resolution):
             try:
                 dates[d].events.append(info)
             except KeyError:
