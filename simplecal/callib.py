@@ -13,6 +13,8 @@ class Event:
         """create an Event from a VEVENT component"""
         self = cls()
         self.start = ical_component['dtstart'].dt
+        self.all_day = (isinstance(self.start, datetime.date)
+                        and not isinstance(self.start, datetime.datetime))
         if 'dtend' in ical_component:
             end = ical_component['dtend'].dt
             self._end_tz = getattr(end, 'tzinfo', None)
@@ -21,12 +23,10 @@ class Event:
             self._end_tz = getattr(self.start, 'tzinfo', None)
             if 'duration' in ical_component:
                 self.duration = ical_component['duration'].dt
-            elif isinstance(self, start, datetime.date):
+            elif self.all_day:
                 self.duration = datetime.timedelta(days=1)
             else:
                 self.duration = datetime.timedelta(0)
-        self.all_day = (isinstance(self.start, datetime.date)
-                        and not isinstance(self.start, datetime.datetime))
 
         rrule_parts = []
         for prop in ('DTSTART', 'RRULE', 'EXRULE', 'RDATE', 'EXDATE'):
