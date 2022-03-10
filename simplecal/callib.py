@@ -8,8 +8,10 @@ import dateutil.tz
 
 class Event:
     """represent a VEVENT"""
-    def __init__(self, ical_component):
+    @classmethod
+    def from_vevent(cls, ical_component):
         """create an Event from a VEVENT component"""
+        self = cls()
         self.start = ical_component['dtstart'].dt
         if 'dtend' in ical_component:
             end = ical_component['dtend'].dt
@@ -48,6 +50,7 @@ class Event:
             self.categories = ()
         self.summary = ical_component.get('summary', b'')
         self.description = ical_component.get('description', b'')
+        return self
 
     @property
     def end(self):
@@ -69,9 +72,12 @@ class Event:
         return f'<Event "{self.summary}" from {self.start} to {self.end}>'
 
 
-def get_events(content):
-    """Get all events"""
-    return [Event(vev) for vev in icalendar.Calendar.from_ical(content).walk('VEVENT')]
+class Calendar:
+    def __init__(self, file):
+        with open(file) as f:
+            data = f.read()
+        self.ical = ical = icalendar.Calendar.from_ical(data)
+        self.events = [Event.from_vevent(vev) for vev in ical.walk('VEVENT')]
 
 
 def filter_events(events, start, end):

@@ -79,19 +79,10 @@ def create_menu(root, dis):
     root.config(menu=main_menu)
 
 
-def run_app(date):
+def run_app(date, calendars, write_calendar):
     root = tk.Tk()
     apply_styles(root)
-    # TODO: as soon as there are a bit more features,
-    # move the calendar to a separate file
-    events = []
-    for cal in config.get('calendars'):
-        try:
-            with open(cal) as f:
-                data = f.read()
-        except OSError:
-            continue
-        events += callib.get_events(data)
+    events = [e for c in calendars for e in c.events]
     display_name = config.get('display')
     if display_name.startswith(('v', 'h')):
         vertical = display_name.startswith('v')

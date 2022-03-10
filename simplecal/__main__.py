@@ -17,8 +17,8 @@ def get_args():
     parser.add_argument('-f', '--config-file', help='Use an alternative config file.')
     parser.add_argument('-C', '--add-config', type=json.loads, default={},
     help='Add the given JSON to the configuration for this run only.')
-    parser.add_argument('-c', '--add-calendar', action='append',
-    help='Add the given calendar without removing already configured ones.')
+    parser.add_argument('-w', '--write-calendar',
+    help='Write edits to this calendar')
     parser.add_argument('-d', '--display',
     type=functools.partial(dateutil.parser.parse, dayfirst=True),
     default=datetime.date.today(),
@@ -29,6 +29,7 @@ def get_args():
     help='Increase verbosity. Repeat for greater increase.')
     parser.add_argument('-q', '--quiet', action='count', default=0,
     help='Decrease verbosity. Repeat for greater decrease.')
+    parser.add_argument('calendar', nargs='*', help='Calendar to display')
     return parser.parse_args()
 
 
@@ -46,14 +47,27 @@ def main(args):
     # import only after logging is set up
     from . import config
     from . import gui
+    from . import callib
 
     if args.config_file:
         config.config_file = args.config_file
     config.load()
     config.patch(args.add_config)
-    if args.add_calendar:
-        config.patch({'calendars': config.get('calendars') + args.add_calendar})
-    gui.run_app(args.display)
+    calendars = []
+    for c in args.calendar:
+        try:
+            calendars.append(callib.Calendar(c))
+        except Exception as e:
+            logging.error(f'Failed to read calendar file "{c}": {e}')
+    write_calendar = None
+    if args.write_calendar:
+        try:
+            write_calendar = callib.Calendar(args.write_calendar)
+        except Exception as e:
+            logging.error(f'Failed to read calendar file "{c}": {e}')
+        else:
+            calendars.append(write_calendar)
+    gui.run_app(args.display, calendars, write_calendar)
 
 
 if __name__ == '__main__':

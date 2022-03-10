@@ -129,14 +129,6 @@ class ConfigBase(abc.ABC):
 class BasicConfig(ConfigBase):
     def __init__(self, frame, conf):
         self.frame = frame
-        ttk.Label(frame, text='Calendars:').pack()
-        self.calendars = SelectionList(
-            frame,
-            conf['calendars'],
-            new_cb=self.new_calendar_cb,
-            unique=True,
-            deletable=True,
-        )
         dframe = ttk.Frame(frame)
         self.dis_var = tk.StringVar()
         ttk.Label(dframe, text='Display: ').pack(side=tk.LEFT)
@@ -166,7 +158,6 @@ class BasicConfig(ConfigBase):
 
     def get_config(self):
         return {
-            'calendars': self.calendars.items,
             'display': self.dis_var.get(),
             'tag_colors': {
                 '': self.default_tag_color_btn['bg'],

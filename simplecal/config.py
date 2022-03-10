@@ -12,7 +12,6 @@ config_file = os.path.join(
     'simplecal', 'config.json',
 )
 DEFAULT = {
-    'calendars': [],
     'display': 'month',
     'days_of_week': list(calendar.day_abbr),
     'week_starts_on': 0,
