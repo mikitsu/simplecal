@@ -11,6 +11,8 @@ class Event:
     def __init__(self, ical_component):
         """create an Event from a VEVENT component"""
         self.start = ical_component['dtstart'].dt
+        self.all_day = (isinstance(self.start, datetime.date)
+                        and not isinstance(self.start, datetime.datetime))
         if 'dtend' in ical_component:
             end = ical_component['dtend'].dt
             self._end_tz = getattr(end, 'tzinfo', None)
@@ -19,12 +21,10 @@ class Event:
             self._end_tz = getattr(self.start, 'tzinfo', None)
             if 'duration' in ical_component:
                 self.duration = ical_component['duration'].dt
-            elif isinstance(self, start, datetime.date):
+            elif self.all_day:
                 self.duration = datetime.timedelta(days=1)
             else:
                 self.duration = datetime.timedelta(0)
-        self.all_day = (isinstance(self.start, datetime.date)
-                        and not isinstance(self.start, datetime.datetime))
 
         rrule_parts = []
         for prop in ('DTSTART', 'RRULE', 'EXRULE', 'RDATE', 'EXDATE'):
@@ -51,7 +51,11 @@ class Event:
 
     @property
     def end(self):
-        end_ts = self.start.timestamp() + self.duration.total_seconds()
+        if self.all_day:
+            end_day = self.start.date().toordinal() + self.duration.days
+            end_ts = datetime.datetime.fromordinal(end_day).timestamp()
+        else:
+            end_ts = self.start.timestamp() + self.duration.total_seconds()
         # Per the spec, the end is non-inclusive. I want it inclusive.
         end_ts -= datetime.time.resolution.total_seconds()
         return datetime.datetime.fromtimestamp(end_ts, self._end_tz)
