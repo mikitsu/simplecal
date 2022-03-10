@@ -51,7 +51,11 @@ class Event:
 
     @property
     def end(self):
-        end_ts = self.start.timestamp() + self.duration.total_seconds()
+        if self.all_day:
+            end_day = self.start.date().toordinal() + self.duration.days
+            end_ts = datetime.datetime.fromordinal(end_day).timestamp()
+        else:
+            end_ts = self.start.timestamp() + self.duration.total_seconds()
         # Per the spec, the end is non-inclusive. I want it inclusive.
         end_ts -= datetime.time.resolution.total_seconds()
         return datetime.datetime.fromtimestamp(end_ts, self._end_tz)
