@@ -1,95 +1,184 @@
 """iCal events"""
 import datetime
-import copy
+import dataclasses
+import logging
+import uuid
+import sys
 import icalendar
-from dateutil import rrule
+import dateutil.rrule as du_rrule
 import dateutil.tz
 
 
+def force_tz(dt):
+    if not isinstance(dt, datetime.datetime):
+        dt = datetime.datetime.combine(dt, datetime.time())
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=dateutil.tz.gettz())
+    else:
+        return dt
+
+
+@dataclasses.dataclass
+class RRule:
+    """wrapper around dateutil.rruleset"""
+    rules: tuple[du_rrule.rrule]
+    inc_dates: tuple[datetime.date]
+    ex_dates: tuple[datetime.date]
+    
+    ruleset: du_rrule.rruleset = dataclasses.field(init=False)
+
+    def __post_init__(self):
+        self.ruleset = du_rrule.rruleset(cache=True)
+        for rule in self.rules:
+            self.ruleset.rrule(rule)
+        for dt in self.inc_dates:
+            self.ruleset.rdate(force_tz(dt))
+        for dt in self.ex_dates:
+            self.ruleset.exdate(force_tz(dt))
+
+    def with_rule(self, rule):
+        if len(self.rules) not in (0, 1):
+            logging.warning('replaceing multiple rrules with a single one')
+        return dataclasses.replace(self, rules=[rule])
+
+    def with_inc(self, dt):
+        return dataclasses.replace(self, inc_dates=self.inc_dates + (dt,))
+
+    def with_ex(self, dt):
+        return dataclasses.replace(self, inc_dates=self.ex_dates + (dt,))
+
+
+@dataclasses.dataclass
 class Event:
     """represent a VEVENT"""
+    start: datetime.datetime
+    end: datetime.datetime
+    summary: str
+    description: str
+    categories: list[str]
+    rrule: RRule
+    uid: str = dataclasses.field(default_factory=uuid.uuid4)
+    mod_stamp: datetime.datetime = dataclasses.field(
+        default_factory=datetime.datetime.now)
+    if sys.version_info >= (3, 10):
+        _: dataclasses.KW_ONLY
+    all_day: bool = None
+
+    def __post_init__(self):
+        if self.all_day is None:
+            self.all_day = not isinstance(self.start, datetime.datetime)
+        else:
+            assert isinstance(self.start, datetime.datetime)
+        self.start = force_tz(self.start)
+
+        if self.end is not None:
+            self.end = force_tz(self.end)
+        elif self.all_day:
+            self.end = datetime.datetime.replace(
+                datetime.datetime.fromordinal(self.start.toordinal() + 1),
+                tzinfo=self.start.tzinfo,
+            )
+        else:
+            self.end = self.start + datetime.datetime.resolution
+
+        if not (self.rrule.rules or self.rrule.inc_dates):
+            self.rrule.ruleset.rdate(self.start)
+
     @classmethod
     def from_vevent(cls, ical_component):
         """create an Event from a VEVENT component"""
-        self = cls()
-        self.start = ical_component['dtstart'].dt
-        self.all_day = (isinstance(self.start, datetime.date)
-                        and not isinstance(self.start, datetime.datetime))
+        start = ical_component['dtstart'].dt
+
+        end = None
         if 'dtend' in ical_component:
             end = ical_component['dtend'].dt
-            self._end_tz = getattr(end, 'tzinfo', None)
-            self.duration = end - self.start
-        else:
-            self._end_tz = getattr(self.start, 'tzinfo', None)
-            if 'duration' in ical_component:
-                self.duration = ical_component['duration'].dt
-            elif self.all_day:
-                self.duration = datetime.timedelta(days=1)
-            else:
-                self.duration = datetime.timedelta(0)
-
-        rrule_parts = []
-        for prop in ('DTSTART', 'RRULE', 'EXRULE', 'RDATE', 'EXDATE'):
-            if prop in ical_component:
-                if isinstance(ical_component[prop], list):
-                    new_parts = ical_component[prop]
-                else:
-                    new_parts = [ical_component[prop]]
-                rrule_parts += (ical_component.content_line(prop, p) for p in new_parts)
-        if len(rrule_parts) > 1:
-            self.rrule = rrule.rrulestr('\n'.join(rrule_parts))
-        else:
-            self.rrule = rrule.rrule(rrule.DAILY, count=1, dtstart=self.start)
+        elif 'duration' in ical_component:
+            end = self.start + ical_component['duration'].dt
 
         if 'categories' in ical_component:
-            cats = ical_component['categories']
-            if not isinstance(cats, list):
-                cats = [cats]
-            self.categories = [c for cs in cats for c in cs.cats]
+            catss = ical_component['categories']
+            if not isinstance(catss, list):
+                catss = [catss]
         else:
-            self.categories = ()
-        self.summary = ical_component.get('summary', b'')
-        self.description = ical_component.get('description', b'')
-        return self
+            catss = []
 
-    @property
-    def end(self):
-        if self.all_day:
-            end_day = self.start.date().toordinal() + self.duration.days
-            end_ts = datetime.datetime.fromordinal(end_day).timestamp()
-        else:
-            end_ts = self.start.timestamp() + self.duration.total_seconds()
-        # Per the spec, the end is non-inclusive. I want it inclusive.
-        end_ts -= datetime.time.resolution.total_seconds()
-        return datetime.datetime.fromtimestamp(end_ts, self._end_tz)
+        def get_list(key):
+            v = ical_component.get(key, [])
+            return v if isinstance(v, list) else [v]
 
-    def starting_at(self, new_time):
-        new = copy.copy(self)
-        new.start = new_time
-        return new
+        rules = (r.to_ical().decode() for r in get_list('rrule'))
+        rrule = RRule(
+            tuple(du_rrule.rrulestr(r, dtstart=force_tz(start)) for r in rules),
+            tuple(d.dt for ds in get_list('rdate') for d in ds.dts),
+            tuple(d.dt for ds in get_list('exdate') for d in ds.dts),
+        )
+
+        return cls(
+            start,
+            end,
+            str(ical_component.get('summary', '')),
+            str(ical_component.get('description', '')),
+            [cat for cats in catss for cat in cats.cats],
+            rrule,
+            str(ical_component['uid']),
+            ical_component['dtstamp'].dt,
+        )
+
+    def starting_at(self, new_start):
+        new_end = self.end + (new_start - self.start)
+        return dataclasses.replace(self, start=new_start, end=new_end)
 
     def __str__(self):
         return f'<Event "{self.summary}" from {self.start} to {self.end}>'
+
+    def to_component(self):
+        r = icalendar.Event()
+        for rule in self.rrule.rules:
+            for line in str(rule).split('\n'):
+                key, value = line.split(':', 1)
+                if key != 'DTSTART':
+                    assert key == 'RRULE'
+                    r.add(key, icalendar.vRecur.from_ical(value))
+        for dt in self.rrule.inc_dates:
+            r.add('rdate', dt)
+        for dt in self.rrule.ex_dates:
+            r.add('exdate', dt)
+        r.add('dtstart', self.start.date() if self.all_day else self.start)
+        r.add('dtend', self.end.date() if self.all_day else self.end)
+        if self.summary:
+            r.add('summary', self.summary)
+        if self.description:
+            r.add('description', self.description)
+        if self.categories:
+            r.add('categories', self.categories)
+        r.add('uid', self.uid)
+        r.add('dtstamp', self.mod_stamp)
+        return r
 
 
 class Calendar:
     def __init__(self, file):
         with open(file) as f:
             data = f.read()
-        self.ical = ical = icalendar.Calendar.from_ical(data)
-        self.events = [Event.from_vevent(vev) for vev in ical.walk('VEVENT')]
+        self.file = file
+        self.ical = icalendar.Calendar.from_ical(data)
+        self.events = {}
+        self.other_comps = []
+        for comp in self.ical.subcomponents:
+            if comp.name == 'VEVENT':
+                self.events[str(comp['uid'])] = Event.from_vevent(comp)
+            else:
+                self.other_comps.append(comp)
+
+    def write(self):
+        event_comps = [evt.to_component() for evt in self.events.values()]
+        self.ical.subcomponents = self.other_comps + event_comps
+        with open(self.file, 'wb') as f:
+            f.write(self.ical.to_ical())
 
 
 def filter_events(events, start, end):
     """Yield events in the given time segment"""
-    orig_start = start
-    orig_end = end
     for event in events:
-        if event.all_day or event.start.tzinfo is None:
-            start = orig_start.replace(tzinfo=None)
-            end = orig_end.replace(tzinfo=None)
-        else:
-            start = orig_start
-            end = orig_end
-        for dt in event.rrule.between(start, end):
+        for dt in event.rrule.ruleset.between(start, end):
             yield event.starting_at(dt)

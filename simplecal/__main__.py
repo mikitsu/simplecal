@@ -64,7 +64,7 @@ def main(args):
         try:
             write_calendar = callib.Calendar(args.write_calendar)
         except Exception as e:
-            logging.error(f'Failed to read calendar file "{c}": {e}')
+            logging.error(f'Failed to read calendar file "{args.write_calendar}": {e}')
         else:
             calendars.append(write_calendar)
     gui.run_app(args.display, calendars, write_calendar)

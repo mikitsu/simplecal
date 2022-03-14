@@ -3,10 +3,12 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.simpledialog as tk_dia
 import dateutil.parser
+import functools
 from .. import config
 from .. import callib
 from . import config_gui
 from . import display
+from . import editing
 
 
 def apply_styles(widget):
@@ -82,7 +84,7 @@ def create_menu(root, dis):
 def run_app(date, calendars, write_calendar):
     root = tk.Tk()
     apply_styles(root)
-    events = [e for c in calendars for e in c.events]
+    events = [e for c in calendars for e in c.events.values()]
     display_name = config.get('display')
     if display_name.startswith(('v', 'h')):
         vertical = display_name.startswith('v')
@@ -92,7 +94,8 @@ def run_app(date, calendars, write_calendar):
         'timeline': display.TimelineDisplay,
         'week': display.WeekDisplay,
     }[display_name]
-    dis = dis_cls(root, events)
+    add_event = functools.partial(editing.add_event, root, write_calendar)
+    dis = dis_cls(root, events, add_event)
     try:
         dis.vertical = vertical
     except NameError:

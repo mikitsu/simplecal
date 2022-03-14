@@ -23,13 +23,15 @@ class DateInfo:
     number: str
     weekday: str
     grey_out: bool
+    date: datetime.date
     events: list[EventInfo] = dataclasses.field(default_factory=list)
 
 
 class DisplayBase:
-    def __init__(self, parent, events):
+    def __init__(self, parent, events, add_event):
         self.frame = ttk.Frame(parent)
         self.events = events
+        self.add_event_cb = add_event
         self.cur_day = None
 
     def move(self, offset):
@@ -79,6 +81,8 @@ class MonthDisplay(DisplayBase):
         ttk.Label(cell_frame, text=date.number, style=st('dateNumber.TLabel')
                   ).pack(anchor=tk.NW)
         make_event_frame(cell_frame, date)
+        if self.add_event_cb is not None:
+            cell_frame.bind('<1>', lambda e: self.add_event_cb(date.date))
 
 
 class TimelineDisplay(DisplayBase):
@@ -170,6 +174,7 @@ def generate_dateinfos(events, start, end, extra_before=0, extra_after=0):
             str(d.day),
             config.get('days_of_week')[d.weekday()],
             not (start <= d <= end),
+            d,
         ) for d in date_range(start_, end_)
     }
 
@@ -182,12 +187,12 @@ def generate_dateinfos(events, start, end, extra_before=0, extra_after=0):
     colors = config.get('tag_colors')
     for evt in callib.filter_events(events, q_start, q_end):
         info = EventInfo(
-            times=(evt.start.toordinal(), evt.end.toordinal()),
+            times=(evt.start, -evt.end.timestamp()),
             summary=evt.summary,
             time='All day' if evt.all_day else evt.start.strftime(time_format),
             color=hex(hash(next((c for c in evt.categories if c in colors), ''))),
         )
-        for d in date_range(evt.start, evt.end):
+        for d in date_range(evt.start, evt.end - datetime.timedelta.resolution):
             try:
                 dates[d].events.append(info)
             except KeyError:
