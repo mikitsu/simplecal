@@ -43,10 +43,10 @@ class DisplayBase:
 
 class MonthDisplay(DisplayBase):
     def _move(self, offset):
-        dyear, tmonth = divmod(self.cur_day.month + offset, 12)
+        dyear, tmonth = divmod(self.cur_day.month + offset - 1, 12)
         return self.cur_day.replace(
             year=self.cur_day.year + dyear,
-            month=tmonth,
+            month=tmonth + 1,
         )
 
     def get_dateinfos(self):
