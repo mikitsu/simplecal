@@ -1,9 +1,11 @@
+from __future__ import annotations
 """iCal events"""
 import datetime
 import dataclasses
 import logging
 import uuid
 import sys
+import re
 import icalendar
 import dateutil.rrule as du_rrule
 import dateutil.tz
@@ -21,16 +23,27 @@ def force_tz(dt):
 @dataclasses.dataclass
 class RRule:
     """wrapper around dateutil.rruleset"""
-    rules: tuple[du_rrule.rrule]
-    inc_dates: tuple[datetime.date]
-    ex_dates: tuple[datetime.date]
-    
+    dtstart: datetime.datetime
+    rules: tuple[dict] = ()
+    inc_dates: tuple[datetime.date] = ()
+    ex_dates: tuple[datetime.date] = ()
+
+    du_rules: list[du_rrule.rrule] = dataclasses.field(init=False)
     ruleset: du_rrule.rruleset = dataclasses.field(init=False)
 
     def __post_init__(self):
+        self.dtstart = force_tz(self.dtstart)
+        self.du_rules = []
         self.ruleset = du_rrule.rruleset(cache=True)
         for rule in self.rules:
+            if 'UNTIL' in rule:
+                rule['UNTIL'] = rule['UNTIL'].astimezone(dateutil.tz.UTC)
+            rule = du_rrule.rrulestr(
+                icalendar.vRecur(rule).to_ical().decode(),
+                dtstart=self.dtstart,
+            )
             self.ruleset.rrule(rule)
+            self.du_rules.append(rule)
         for dt in self.inc_dates:
             self.ruleset.rdate(force_tz(dt))
         for dt in self.ex_dates:
@@ -38,14 +51,14 @@ class RRule:
 
     def with_rule(self, rule):
         if len(self.rules) not in (0, 1):
-            logging.warning('replaceing multiple rrules with a single one')
-        return dataclasses.replace(self, rules=[rule])
+            logging.warning('replacing multiple rrules with a single one')
+        return dataclasses.replace(self, rules=(rule,))
 
     def with_inc(self, dt):
         return dataclasses.replace(self, inc_dates=self.inc_dates + (dt,))
 
     def with_ex(self, dt):
-        return dataclasses.replace(self, inc_dates=self.ex_dates + (dt,))
+        return dataclasses.replace(self, ex_dates=self.ex_dates + (dt,))
 
 
 @dataclasses.dataclass
@@ -59,16 +72,21 @@ class Event:
     rrule: RRule
     uid: str = dataclasses.field(default_factory=uuid.uuid4)
     mod_stamp: datetime.datetime = dataclasses.field(
-        default_factory=datetime.datetime.now)
+        default_factory=lambda: datetime.datetime.now(dateutil.tz.UTC))
     if sys.version_info >= (3, 10):
         _: dataclasses.KW_ONLY
     all_day: bool = None
+    original: Event = dataclasses.field(init=False)
+    _had_tz: bool = None
 
     def __post_init__(self):
+        self.original = self
         if self.all_day is None:
             self.all_day = not isinstance(self.start, datetime.datetime)
         else:
             assert isinstance(self.start, datetime.datetime)
+        if self._had_tz is None:
+            self._had_tz = getattr(self.start, 'tzinfo', None) is not None
         self.start = force_tz(self.start)
 
         if self.end is not None:
@@ -93,7 +111,7 @@ class Event:
         if 'dtend' in ical_component:
             end = ical_component['dtend'].dt
         elif 'duration' in ical_component:
-            end = self.start + ical_component['duration'].dt
+            end = start + ical_component['duration'].dt
 
         if 'categories' in ical_component:
             catss = ical_component['categories']
@@ -106,9 +124,9 @@ class Event:
             v = ical_component.get(key, [])
             return v if isinstance(v, list) else [v]
 
-        rules = (r.to_ical().decode() for r in get_list('rrule'))
         rrule = RRule(
-            tuple(du_rrule.rrulestr(r, dtstart=force_tz(start)) for r in rules),
+            start,
+            tuple({k: v for k, [v] in r.items()} for r in  get_list('rrule')),
             tuple(d.dt for ds in get_list('rdate') for d in ds.dts),
             tuple(d.dt for ds in get_list('exdate') for d in ds.dts),
         )
@@ -126,25 +144,31 @@ class Event:
 
     def starting_at(self, new_start):
         new_end = self.end + (new_start - self.start)
-        return dataclasses.replace(self, start=new_start, end=new_end)
+        r = dataclasses.replace(self, start=new_start, end=new_end)
+        r.original = self.original
+        return r
 
     def __str__(self):
         return f'<Event "{self.summary}" from {self.start} to {self.end}>'
 
     def to_component(self):
         r = icalendar.Event()
-        for rule in self.rrule.rules:
+        val_re = re.compile(r'(UNTIL=\d{8}T\d{6})')
+        for rule in self.rrule.du_rules:
             for line in str(rule).split('\n'):
                 key, value = line.split(':', 1)
                 if key != 'DTSTART':
-                    assert key == 'RRULE'
+                    assert key == 'RRULE', key
+                    # our until value is always UTC internally
+                    value = val_re.sub('\\1Z', value, count=1)
                     r.add(key, icalendar.vRecur.from_ical(value))
         for dt in self.rrule.inc_dates:
             r.add('rdate', dt)
         for dt in self.rrule.ex_dates:
             r.add('exdate', dt)
-        r.add('dtstart', self.start.date() if self.all_day else self.start)
-        r.add('dtend', self.end.date() if self.all_day else self.end)
+
+        r.add('dtstart', self.orig_start(tz=True, day=True))
+        r.add('dtend', self.orig_end(tz=True, day=True))
         if self.summary:
             r.add('summary', self.summary)
         if self.description:
@@ -154,6 +178,21 @@ class Event:
         r.add('uid', self.uid)
         r.add('dtstamp', self.mod_stamp)
         return r
+
+    def _mk_orig_dt(attr):
+        def orig_(self, *, tz=False, day=False):
+            r = getattr(self, attr)
+            if tz and not self._had_tz:
+                r = r.replace(tzinfo=None)
+            if day and self.all_day:
+                r = r.date()
+            return r
+        orig_.__name__ += attr
+        return orig_
+
+    orig_start = _mk_orig_dt('start')
+    orig_end = _mk_orig_dt('end')
+    del _mk_orig_dt
 
 
 class Calendar:

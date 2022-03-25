@@ -2,10 +2,10 @@
 import tkinter as tk
 from tkinter import ttk
 import tkinter.simpledialog as tk_dia
+import collections
+import logging
 import dateutil.parser
-import functools
 from .. import config
-from .. import callib
 from . import config_gui
 from . import display
 from . import editing
@@ -81,10 +81,10 @@ def create_menu(root, dis):
     root.config(menu=main_menu)
 
 
-def run_app(date, calendars, write_calendar):
+def run_app(date, calendars, allow_write):
     root = tk.Tk()
     apply_styles(root)
-    events = [e for c in calendars for e in c.events.values()]
+    events = collections.ChainMap(*(c.events for c in calendars))
     display_name = config.get('display')
     if display_name.startswith(('v', 'h')):
         vertical = display_name.startswith('v')
@@ -94,13 +94,33 @@ def run_app(date, calendars, write_calendar):
         'timeline': display.TimelineDisplay,
         'week': display.WeekDisplay,
     }[display_name]
-    add_event = functools.partial(editing.add_event, root, write_calendar)
-    dis = dis_cls(root, events, add_event)
+
+    if allow_write:
+        def edit_cb(evt):
+            events[evt.uid] = evt
+            calendars[0].write()
+            dis.display()
+
+        def delete_cb(evt):
+            try:
+                del events[evt.uid]
+            except KeyError:
+                logging.error(f'Event {evt} not in writable calendar')
+            else:
+                if evt.uid in events:
+                    logging.warning(f'Event {evt} still in non-writable calendar')
+                calendars[0].write()
+                dis.display()
+    else:
+        edit_cb = delete_cb = None
+
+    add_event, edit_event = editing.get_handlers(root, edit_cb, delete_cb)
+    dis = dis_cls(root, date, events.values(), add_event, edit_event)
     try:
         dis.vertical = vertical
     except NameError:
         pass
-    dis.display(date)
+    dis.display()
     dis.frame.pack(expand=True, fill=tk.BOTH)
     create_menu(root, dis)
     root.mainloop()

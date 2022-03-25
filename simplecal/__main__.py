@@ -2,7 +2,6 @@
 import argparse
 import json
 import sys
-import os
 import logging
 import datetime
 import functools
@@ -53,21 +52,21 @@ def main(args):
         config.config_file = args.config_file
     config.load()
     config.patch(args.add_config)
+
     calendars = []
+    if args.write_calendar:
+        try:
+            calendars.append(callib.Calendar(args.write_calendar))
+        except Exception as e:
+            logging.error(f'Failed to read calendar file "{args.write_calendar}": {e}')
+            sys.exit(1)
     for c in args.calendar:
         try:
             calendars.append(callib.Calendar(c))
         except Exception as e:
             logging.error(f'Failed to read calendar file "{c}": {e}')
-    write_calendar = None
-    if args.write_calendar:
-        try:
-            write_calendar = callib.Calendar(args.write_calendar)
-        except Exception as e:
-            logging.error(f'Failed to read calendar file "{args.write_calendar}": {e}')
-        else:
-            calendars.append(write_calendar)
-    gui.run_app(args.display, calendars, write_calendar)
+
+    gui.run_app(args.display, calendars, bool(args.write_calendar))
 
 
 if __name__ == '__main__':
