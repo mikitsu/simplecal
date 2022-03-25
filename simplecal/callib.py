@@ -126,7 +126,7 @@ class Event:
 
         rrule = RRule(
             start,
-            tuple({k: v for k, [v] in r.items()} for r in  get_list('rrule')),
+            tuple({k: v for k, [v] in r.items()} for r in get_list('rrule')),
             tuple(d.dt for ds in get_list('rdate') for d in ds.dts),
             tuple(d.dt for ds in get_list('exdate') for d in ds.dts),
         )

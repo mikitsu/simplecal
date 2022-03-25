@@ -45,13 +45,15 @@ def main(args):
 
     # import only after logging is set up
     from . import config
-    from . import gui
-    from . import callib
 
     if args.config_file:
         config.config_file = args.config_file
     config.load()
     config.patch(args.add_config)
+
+    # import only after config is loaded
+    from . import gui
+    from . import callib
 
     calendars = []
     if args.write_calendar:
