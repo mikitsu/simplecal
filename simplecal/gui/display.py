@@ -69,10 +69,12 @@ class DisplayBase:
 
 class MonthDisplay(DisplayBase):
     def _move(self, offset):
+        days_per_month = (31, 28 + calendar.isleap(self.cur_day.year), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
         dyear, tmonth = divmod(self.cur_day.month + offset - 1, 12)
         return self.cur_day.replace(
             year=self.cur_day.year + dyear,
             month=tmonth + 1,
+            day=min(self.cur_day.day, days_per_month[tmonth]),
         )
 
     def get_dateinfos(self):

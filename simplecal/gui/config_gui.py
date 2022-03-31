@@ -277,7 +277,8 @@ class Selectors(tuple):
             frame.pack()
 
     def get_conf(self):
-        return {sel.key: sel.get_conf() for sel in self}
+        return {sel.key: sel.get_conf() for sel in self
+                if sel.get_conf() is not None}
 
 
 class SelectorBase:
