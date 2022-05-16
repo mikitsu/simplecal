@@ -138,6 +138,7 @@ class TimelineDisplay(DisplayBase):
             ).pack(side=tk.RIGHT)
             hframe.pack(fill=tk.X, expand=True)
             self.make_event_frame(frame, date)
+            hframe.bind('<1>', lambda _, d=date.date: self.add_event_cb(d))
 
     def add_frame(self, style):
         frame = ttk.Frame(self.frame, style=style)
