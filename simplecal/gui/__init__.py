@@ -1,6 +1,7 @@
 """GUI"""
 import tkinter as tk
 from tkinter import ttk
+import tkinter.messagebox as tk_msg
 import tkinter.simpledialog as tk_dia
 import collections
 import logging
@@ -9,6 +10,16 @@ from .. import config
 from . import config_gui
 from . import display
 from . import editing
+
+
+class MessageboxHandler(logging.Handler):
+    def emit(self, record):
+        func = tk_msg.showinfo
+        if record.levelno >= logging.WARNING:
+            func = tk_msg.showwarning
+        if record.levelno >= logging.ERROR:
+            func = tk_dia.showerror
+        func(record.levelname, record.message)
 
 
 def apply_styles(widget):
@@ -84,6 +95,7 @@ def create_menu(root, dis, save_cb):
 
 
 def run_app(date, calendars, allow_write):
+    logging.root.addHandler(MessageboxHandler(logging.WARNING))
     root = tk.Tk()
     apply_styles(root)
     events = collections.ChainMap(*(c.events for c in calendars))
@@ -102,7 +114,7 @@ def run_app(date, calendars, allow_write):
             try:
                 calendars[0].write()
             except OSError as e:
-                logging.error(e)
+                logging.error(str(e))
 
         def edit_cb(evt):
             events[evt.uid] = evt
