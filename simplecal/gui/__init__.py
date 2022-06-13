@@ -49,7 +49,7 @@ def apply_styles(widget):
         style.configure(style_name, **options)
 
 
-def create_menu(root, dis):
+def create_menu(root, dis, save_cb):
     main_menu = tk.Menu(root, relief='sunken')
     nav_menu = tk.Menu(main_menu, tearoff=0)
 
@@ -72,6 +72,8 @@ def create_menu(root, dis):
         underline=0,
         command=lambda: dis.move(1),
     )
+    if save_cb is not None:
+        main_menu.add_command(label='Save', underline=0, command=save_cb)
     main_menu.add_cascade(label='Navigation', menu=nav_menu, underline=0)
     main_menu.add_command(
         label='Configuration',
@@ -96,9 +98,16 @@ def run_app(date, calendars, allow_write):
     }[display_name]
 
     if allow_write:
+        def save_cb():
+            try:
+                calendars[0].write()
+            except OSError as e:
+                logging.error(e)
+
         def edit_cb(evt):
             events[evt.uid] = evt
-            calendars[0].write()
+            if config.get('autosave'):
+                save_cb()
             dis.display()
 
         def delete_cb(evt):
@@ -109,10 +118,11 @@ def run_app(date, calendars, allow_write):
             else:
                 if evt.uid in events:
                     logging.warning(f'Event {evt} still in non-writable calendar')
-                calendars[0].write()
+                if config.get('autosave'):
+                    save_cb()
                 dis.display()
     else:
-        edit_cb = delete_cb = None
+        edit_cb = delete_cb = save_cb = None
 
     add_event, edit_event = editing.get_handlers(root, edit_cb, delete_cb)
     dis = dis_cls(root, date, events.values(), add_event, edit_event)
@@ -122,5 +132,5 @@ def run_app(date, calendars, allow_write):
         pass
     dis.display()
     dis.frame.pack(expand=True, fill=tk.BOTH)
-    create_menu(root, dis)
+    create_menu(root, dis, save_cb)
     root.mainloop()

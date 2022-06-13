@@ -18,6 +18,7 @@ DEFAULT = {
     'time_format': '%H:%M',
     'lum_threshold': 140,
     'grey_factor': 0.5,
+    'autosave': True,
     'tag_colors': {
         '': '#bbbb88',
     },
