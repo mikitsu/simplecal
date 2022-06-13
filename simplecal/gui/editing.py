@@ -192,7 +192,8 @@ class RRuleInput:
             return self._rule.with_rule(attrs)
 
     def set(self, rrule):
-        assert rrule.dtstart.replace(tzinfo=None) == self.start.get()
+        # no direct comparison to handle datetime.date instances
+        assert rrule.dtstart.replace(tzinfo=None).ctime() == self.start.get().ctime()
         self._rule = rrule
         self.repeat_var.set(bool(rrule.rules))
         if rrule.rules:
@@ -316,6 +317,7 @@ def real_edit_event(root, callback, event):
     cats = tuple({*filter(None, config.get('tag_colors')), *event.categories})
     popup = EventPopup(root, callback, cats)
     popup.title_var.set('Edit Event')
+    popup.allday_var.set(event.all_day)
     popup.start.set(event.orig_start(day=True))
     popup.end.set(event.orig_end(day=True))
     popup.summary_var.set(event.summary)
