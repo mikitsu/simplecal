@@ -97,6 +97,10 @@ class Event:
         if not (self.rrule.rules or self.rrule.inc_dates):
             self.rrule.ruleset.rdate(self.start)
 
+    @property
+    def duration(self):
+        return self.end - self.start
+
     @classmethod
     def from_vevent(cls, ical_component):
         """create an Event from a VEVENT component"""
@@ -214,5 +218,5 @@ class Calendar:
 def filter_events(events, start, end):
     """Yield events in the given time segment"""
     for event in events:
-        for dt in event.rrule.ruleset.between(start, end):
+        for dt in event.rrule.ruleset.between(start - event.duration, end):
             yield event.starting_at(dt)
