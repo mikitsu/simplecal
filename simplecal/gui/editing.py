@@ -219,7 +219,7 @@ class EventPopup:
         self.summary_var = tk.StringVar(root)
         self.description_var = tk.StringVar(root)
         self.allday_var = tk.IntVar(root)
-        self.end_var = tk.IntVar(root)
+        end_var = tk.IntVar(root)
         self.uid = str(uuid.uuid4())
 
         self.toplevel = toplevel = tk.Toplevel(root)
@@ -240,9 +240,9 @@ class EventPopup:
         alldaybtn.pack()
 
         endframe = tk.Frame(toplevel)
-        endbtn = ttk.Checkbutton(endframe, text='Ends on ', variable=self.end_var)
+        endbtn = ttk.Checkbutton(endframe, text='Ends on ', variable=end_var)
         endbtn.pack(side=tk.LEFT)
-        self.end = DatetimeInput(endframe, self.allday_var, [self.end_var])
+        self.end = DatetimeInput(endframe, self.allday_var, [end_var])
 
         self.rrule = RRuleInput(tk.Frame(toplevel), self.start, self.allday_var)
         self.allday_var.set(0)
@@ -319,9 +319,7 @@ def real_edit_event(root, callback, event):
     popup.title_var.set('Edit Event')
     popup.allday_var.set(event.all_day)
     popup.start.set(event.orig_start(day=True))
-    if event.end != event.start:
-        popup.end.set(event.orig_end(day=True))
-        popup.end_var.set(1)
+    popup.end.set(event.orig_end(day=True))
     popup.summary_var.set(event.summary)
     popup.description_var.set(event.description)
     for cat in event.categories:

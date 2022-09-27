@@ -91,8 +91,13 @@ class Event:
 
         if self.end is not None:
             self.end = force_tz(self.end)
+        elif self.all_day:
+            self.end = datetime.datetime.replace(
+                datetime.datetime.fromordinal(self.start.toordinal() + 1),
+                tzinfo=self.start.tzinfo,
+            )
         else:
-            self.end = self.start
+            self.end = self.start + datetime.datetime.resolution
 
         if not (self.rrule.rules or self.rrule.inc_dates):
             self.rrule.ruleset.rdate(self.start)

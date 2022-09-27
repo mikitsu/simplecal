@@ -202,7 +202,7 @@ def generate_dateinfos(events, start, end, extra_before=0, extra_after=0):
             color=hex(hash(next((c for c in evt.categories if c in colors), ''))),
             event=evt,
         )
-        for d in date_range(evt.start, evt.end):
+        for d in date_range(evt.start, evt.end - datetime.timedelta.resolution):
             try:
                 dates[d].events.append(info)
             except KeyError:
