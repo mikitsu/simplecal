@@ -11,7 +11,7 @@ from .. import callib
 
 
 def vcmd_range(low, high):
-    return lambda s: not s or s.isdecimal() and low <= int(s) <= high
+    return lambda s: not s or s.isdecimal() and low <= int(s) < high
 
 
 class DatetimeInput:
@@ -252,6 +252,7 @@ class EventPopup:
             self.toplevel,
             height=len(self.categories),
             selectmode='multiple',
+            exportselection=False,
         )
         self.cat_lb.insert(0, *self.categories)
         self.cat_lb.pack()
