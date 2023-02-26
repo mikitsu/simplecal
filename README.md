@@ -6,6 +6,7 @@ This is a simple iCal-calendar in Python.
 Supported:
 
 - viewing iCal calendars
+- adding and editing events
 - colored categories
 
 Not supported and not planned:
@@ -16,7 +17,6 @@ Not supported and not planned:
 
 I'm working on/thinking about:
 
-- allowing edits, i.e. editing and creating new events (for v0.3)
 - alarms (for v1.0)
 - minimal subaspects of CalDAV (for v1.x)
 
