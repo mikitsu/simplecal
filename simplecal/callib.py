@@ -83,8 +83,6 @@ class Event:
         self.original = self
         if self.all_day is None:
             self.all_day = not isinstance(self.start, datetime.datetime)
-        else:
-            assert isinstance(self.start, datetime.datetime)
         if self._had_tz is None:
             self._had_tz = getattr(self.start, 'tzinfo', None) is not None
         self.start = force_tz(self.start)
@@ -100,7 +98,8 @@ class Event:
             self.end = self.start + datetime.datetime.resolution
 
         if not (self.rrule.rules or self.rrule.inc_dates):
-            self.rrule.ruleset.rdate(self.start)
+            # We always want a datetime here
+            self.rrule.ruleset.rdate(datetime.datetime(*self.start.timetuple()[:-4], tzinfo=force_tz(self.start).tzinfo))
 
     @property
     def duration(self):
@@ -147,7 +146,7 @@ class Event:
         )
 
     def starting_at(self, new_start):
-        new_end = self.end + (new_start - self.start)
+        new_end = new_start + self.duration
         r = dataclasses.replace(self, start=new_start, end=new_end)
         r.original = self.original
         return r
