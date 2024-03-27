@@ -198,7 +198,7 @@ def generate_dateinfos(events, start, end, extra_before=0, extra_after=0):
         info = EventInfo(
             times=(evt.start, -evt.end.timestamp()),
             summary=evt.summary,
-            time='All day' if evt.all_day else evt.start.strftime(time_format),
+            time='All day' if evt.all_day else evt.start.astimezone(dateutil.tz.gettz()).strftime(time_format),
             color=hex(hash(next((c for c in evt.categories if c in colors), ''))),
             event=evt,
         )
