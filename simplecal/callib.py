@@ -17,7 +17,7 @@ def force_tz(dt):
     if dt.tzinfo is None:
         return dt.replace(tzinfo=dateutil.tz.gettz())
     else:
-        return dt
+        return dt.astimezone(dateutil.tz.gettz())
 
 
 @dataclasses.dataclass
