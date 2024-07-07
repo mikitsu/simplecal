@@ -6,6 +6,7 @@ import logging
 import uuid
 import sys
 import re
+import collections
 import icalendar
 import dateutil.rrule as du_rrule
 import dateutil.tz
@@ -73,6 +74,7 @@ class Event:
     uid: str = dataclasses.field(default_factory=uuid.uuid4)
     mod_stamp: datetime.datetime = dataclasses.field(
         default_factory=lambda: datetime.datetime.now(dateutil.tz.UTC))
+    overrides: dict[datetime.datetime, Event] = dataclasses.field(default_factory=dict)
     if sys.version_info >= (3, 10):
         _: dataclasses.KW_ONLY
     all_day: bool = None
@@ -205,12 +207,24 @@ class Calendar:
         self.file = file
         self.ical = icalendar.Calendar.from_ical(data)
         self.events = {}
+        overrides = collections.defaultdict(dict)
         self.other_comps = []
         for comp in self.ical.subcomponents:
             if comp.name == 'VEVENT':
-                self.events[str(comp['uid'])] = Event.from_vevent(comp)
+                if 'recurrence-id' in comp:
+                    if 'range' in comp['recurrence-id'].params:
+                        logging.warning(f'cannot process RANGE param in event with RECURRENCE-ID, skipping')
+                        continue
+                    overrides[str(comp['uid']), comp['recurrence-id'].dt] = Event.from_vevent(comp)
+                else:
+                    self.events[str(comp['uid'])] = Event.from_vevent(comp)
             else:
                 self.other_comps.append(comp)
+        for (uid, dt), e in overrides.items():
+            try:
+                self.events[uid].overrides[force_tz(dt)] = e
+            except KeyError as e:
+                logging.warning(f'failed to add recurrence-specific override for UID {uid}')
 
     def write(self):
         event_comps = [evt.to_component() for evt in self.events.values()]
@@ -223,4 +237,8 @@ def filter_events(events, start, end):
     """Yield events in the given time segment"""
     for event in events:
         for dt in event.rrule.ruleset.between(start - event.duration, end):
-            yield event.starting_at(dt)
+            if dt not in event.overrides:
+                yield event.starting_at(dt)
+        for dt, e in event.overrides.items():
+            if start <= dt <= end:
+                yield e
