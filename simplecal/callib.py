@@ -38,7 +38,7 @@ class RRule:
         self.ruleset = du_rrule.rruleset(cache=True)
         for rule in self.rules:
             if 'UNTIL' in rule:
-                rule['UNTIL'] = rule['UNTIL'].astimezone(dateutil.tz.UTC)
+                rule['UNTIL'] = force_tz(rule['UNTIL']).astimezone(dateutil.tz.UTC)
             rule = du_rrule.rrulestr(
                 icalendar.vRecur(rule).to_ical().decode(),
                 dtstart=self.dtstart,
