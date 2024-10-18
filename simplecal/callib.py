@@ -69,6 +69,7 @@ class Event:
     end: datetime.datetime
     summary: str
     description: str
+    location: str
     categories: list[str]
     rrule: RRule
     uid: str = dataclasses.field(default_factory=uuid.uuid4)
@@ -141,6 +142,7 @@ class Event:
             end,
             str(ical_component.get('summary', '')),
             str(ical_component.get('description', '')),
+            str(ical_component.get('location', '')),
             [cat for cats in catss for cat in cats.cats],
             rrule,
             str(ical_component['uid']),
@@ -174,12 +176,9 @@ class Event:
 
         r.add('dtstart', self.orig_start(tz=True, day=True))
         r.add('dtend', self.orig_end(tz=True, day=True))
-        if self.summary:
-            r.add('summary', self.summary)
-        if self.description:
-            r.add('description', self.description)
-        if self.categories:
-            r.add('categories', self.categories)
+        for k in ('summary', 'description', 'location', 'categories'):
+            if v := getattr(self, k):
+                r.add(k, v)
         r.add('uid', self.uid)
         r.add('dtstamp', self.mod_stamp)
         return r

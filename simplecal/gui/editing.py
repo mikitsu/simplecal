@@ -218,6 +218,7 @@ class EventPopup:
         self.title_var = tk.StringVar(root)
         self.summary_var = tk.StringVar(root)
         self.description_var = tk.StringVar(root)
+        self.location_var = tk.StringVar(root)
         self.allday_var = tk.IntVar(root)
         self.end_var = tk.IntVar(root)
         self.uid = str(uuid.uuid4())
@@ -257,6 +258,7 @@ class EventPopup:
         self.cat_lb.insert(0, *self.categories)
         self.cat_lb.pack()
         self._add_labeled_entry('Description: ', self.description_var)
+        self._add_labeled_entry('Location: ', self.location_var)
 
         btnframe = tk.Frame(toplevel)
         ttk.Button(btnframe, text='OK', command=self.on_ok).pack(side=tk.LEFT)
@@ -281,6 +283,7 @@ class EventPopup:
             end,
             self.summary_var.get(),
             self.description_var.get(),
+            self.location_var.get(),
             [self.categories[i] for i in self.cat_lb.curselection()],
             self.rrule.get(),
             self.uid,
@@ -326,6 +329,7 @@ def real_edit_event(root, callback, event):
     popup.end.set(event.orig_end(day=True))
     popup.summary_var.set(event.summary)
     popup.description_var.set(event.description)
+    popup.location_var.set(event.location)
     for cat in event.categories:
         popup.cat_lb.selection_set(cats.index(cat))
     popup.rrule.set(event.rrule)
