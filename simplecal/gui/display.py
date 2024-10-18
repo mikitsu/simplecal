@@ -207,6 +207,7 @@ def generate_dateinfos(events, start, end, extra_before=0, extra_after=0):
                 dates[d].events.append(info)
             except KeyError:
                 pass
+            info = dataclasses.replace(info, time='cont.')
 
     for date_info in dates.values():
         date_info.events.sort(key=lambda e: e.times)
